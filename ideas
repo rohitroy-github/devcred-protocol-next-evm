@@ -1,0 +1,42 @@
+🧪 How to deploy (quick flow)
+Deploy DevCredProfile
+Deploy DevCredEscrow(profileAddress)
+Transfer ownership:
+await profile.transferOwnership(escrow.address)
+
+🔄 MVP Flow Recap
+Dev → mintProfile()
+Client → createJob() (send ETH)
+Client → assignDeveloper()
+Dev → submitWork()
+Client → approveWork()
+Dev gets paid + reputation updated
+
+Phase 1:
+Profile NFT
+Simple escrow contract
+Manual job completion
+Phase 2:
+Reputation scoring
+Job marketplace UI
+Phase 3:
+GitHub integration
+DAO integrations
+
+/app
+  /jobs
+    page.tsx
+    [id]/page.tsx
+  /profile
+    page.tsx
+  /create-job
+    page.tsx
+
+/components
+  JobCard.tsx
+  ProfileCard.tsx
+  WalletButton.tsx
+
+/lib
+  contracts.ts
+  config.ts
