@@ -57,6 +57,8 @@ module.exports = {
         // 1000 is a good balance for most production contracts
         runs: 1000,
       },
+      // OpenZeppelin v5 uses mcopy in some utilities, which requires Cancun EVM.
+      evmVersion: "cancun",
     },
   },
 
