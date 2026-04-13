@@ -5,6 +5,8 @@ const UserSchema = new Schema(
     walletAddress: {
       type: String,
       required: true,
+      default: null,
+      unique: true,
       lowercase: true,
       trim: true,
       index: true,
@@ -44,7 +46,5 @@ const UserSchema = new Schema(
     collection: "users",
   }
 );
-
-UserSchema.index({ walletAddress: 1 }, { unique: true });
 
 export default mongoose.models.User || mongoose.model("User", UserSchema);

@@ -5,6 +5,8 @@ const GithubVerificationSchema = new Schema(
     walletAddress: {
       type: String,
       required: true,
+      default: null,
+      unique: true,
       lowercase: true,
       trim: true,
       index: true,
@@ -45,8 +47,6 @@ const GithubVerificationSchema = new Schema(
     collection: "githubVerifications",
   }
 );
-
-GithubVerificationSchema.index({ walletAddress: 1, githubUsername: 1 });
 
 export default mongoose.models.GithubVerification ||
   mongoose.model("GithubVerification", GithubVerificationSchema);

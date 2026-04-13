@@ -5,6 +5,8 @@ const ProfileSchema = new Schema(
     walletAddress: {
       type: String,
       required: true,
+      default: null,
+      unique: true,
       lowercase: true,
       trim: true,
       index: true,
@@ -37,7 +39,6 @@ const ProfileSchema = new Schema(
   }
 );
 
-ProfileSchema.index({ walletAddress: 1 }, { unique: true });
 ProfileSchema.index({ tokenId: 1 }, { unique: true });
 
 export default mongoose.models.Profile ||

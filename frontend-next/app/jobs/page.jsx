@@ -1,25 +1,61 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import JobCard from "../../components/JobCard";
 import WalletButton from "../../components/WalletButton";
 
-const mockJobs = [
-  {
-    id: 1,
-    client: "0xA1...9F",
-    developer: "0xC4...2D",
-    amountEth: "0.30",
-    status: "InProgress",
-  },
-  {
-    id: 2,
-    client: "0xB2...7E",
-    developer: "",
-    amountEth: "0.75",
-    status: "Open",
-  },
-];
+const statusLabelMap = {
+  OPEN: "Open",
+  IN_PROGRESS: "InProgress",
+  SUBMITTED: "Submitted",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
+  DISPUTED: "Cancelled",
+};
 
 export default function JobsPage() {
+  const [jobs, setJobs] = useState([]);
+  const [walletAddress, setWalletAddress] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadJobs() {
+      try {
+        const response = await fetch("/api/jobs", { cache: "no-store" });
+        const result = await response.json();
+        setJobs(Array.isArray(result.jobs) ? result.jobs : []);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadJobs();
+  }, []);
+
+  useEffect(() => {
+    async function upsertUser() {
+      if (!walletAddress) return;
+      await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress }),
+      });
+    }
+
+    upsertUser().catch(() => {});
+  }, [walletAddress]);
+
+  const formattedJobs = useMemo(() => {
+    return jobs.map((job) => ({
+      id: job.jobId,
+      client: job.client,
+      developer: job.developer,
+      amountEth: job.amount,
+      status: statusLabelMap[job.status] || "Open",
+    }));
+  }, [jobs]);
+
   return (
     <main className="min-h-screen bg-zinc-50 px-6 py-10">
       <div className="mx-auto max-w-4xl space-y-6">
@@ -35,12 +71,16 @@ export default function JobsPage() {
             >
               Create Job
             </Link>
-            <WalletButton />
+            <WalletButton onConnected={setWalletAddress} />
           </div>
         </header>
 
         <section className="grid gap-4 sm:grid-cols-2">
-          {mockJobs.map((job) => (
+          {loading ? <p className="text-sm text-zinc-600">Loading jobs...</p> : null}
+          {!loading && formattedJobs.length === 0 ? (
+            <p className="text-sm text-zinc-600">No jobs yet. Create one from the button above.</p>
+          ) : null}
+          {formattedJobs.map((job) => (
             <Link key={job.id} href={`/jobs/${job.id}`} className="block">
               <JobCard job={job} />
             </Link>

@@ -40,74 +40,167 @@ DAO integrations
 /lib
   contracts.ts
   config.ts
+,
 
-// users
-{
-  _id: ObjectId,
-  walletAddress: "0x123",
-  profileTokenId: 1, // from NFT
+Workflow: 
 
-  username: "rohit_dev",        // optional
-  avatarUrl: "ipfs://...",
-  bio: "Full stack dev",
+🧠 High-Level Architecture: 
 
-  githubUsername: "rohit123",
-  githubVerified: true,
+Frontend (Next.js)
+        ↓
+Backend API (Node.js)
+        ↓
+MongoDB (fast reads)
+        ↑
+Event Listener (sync engine)
+        ↑
+Smart Contracts (truth layer)
 
-  createdAt: Date,
-  updatedAt: Date
-}
+🔁 Core System Loop (VERY IMPORTANT)
 
-// profiles
-{
-  _id: ObjectId,
+Your app runs on this loop:
+
+User Action → Smart Contract → Event → Backend Listener → DB → UI अपडेट
+
+👉 This is the heart of your protocol
+
+🧑‍💻 SCENARIO: Developer + Client interaction
+🔹 STEP 1: User connects wallet
+Frontend:
+User connects via MetaMask
+Backend:
+Check if user exists in DB
+DB:
+users.insert({
+  walletAddress: "0x123"
+})
+
+👉 No blockchain interaction yet
+
+🔹 STEP 2: Developer creates profile (on-chain)
+Frontend:
+mintProfile()
+Blockchain:
+NFT minted
+Profile created
+Event emitted:
+ProfileMinted(address user, uint tokenId)
+Backend Listener:
+Listens to event
+Updates DB:
+profiles.insert({
   walletAddress: "0x123",
   tokenId: 1,
-
-  reputation: 1200,
-  completedJobs: 15,
-
-  lastUpdatedBlock: 12345678,
-  updatedAt: Date
-}
-
-// jobs
-{
-  _id: ObjectId,
-  jobId: 1, // on-chain ID
-
+  reputation: 0,
+  completedJobs: 0
+})
+🔹 STEP 3: Client creates a job
+Frontend:
+User fills form
+Uploads metadata to IPFS
+Calls:
+createJob()
+Blockchain:
+Funds locked
+Job created
+Event:
+JobCreated(jobId, client, amount)
+Backend:
+Saves to DB:
+jobs.insert({
+  jobId: 1,
   client: "0x123",
+  amount: "1 ETH",
+  status: "OPEN",
+  metadataURI: "ipfs://..."
+})
+🔹 STEP 4: Job marketplace UI loads
+Frontend:
+
+Calls:
+
+GET /jobs
+Backend:
+
+Fetches from DB:
+
+jobs.find({ status: "OPEN" })
+
+👉 No blockchain calls → fast UI
+
+🔹 STEP 5: Client assigns developer
+Frontend:
+assignDeveloper(jobId, devAddress)
+Blockchain:
+Job updated
+Event:
+JobAssigned(jobId, developer)
+Backend:
+jobs.update({
+  jobId: 1
+}, {
   developer: "0x456",
+  status: "IN_PROGRESS"
+})
+🔹 STEP 6: Developer submits work
+Frontend:
+submitWork(jobId)
+Blockchain:
+Status → SUBMITTED
+Backend:
+jobs.update({
+  jobId: 1
+}, {
+  status: "SUBMITTED"
+})
+🔹 STEP 7: Client approves work (CRITICAL STEP)
+Frontend:
+approveWork(jobId)
+Blockchain:
+Funds transferred
+Reputation updated
+Event:
+JobCompleted(jobId)
+Backend (IMPORTANT LOGIC HERE)
+Fetch job
+Calculate reputation (off-chain)
+Update DB
+jobs.update({ jobId: 1 }, { status: "COMPLETED" })
 
-  amount: "1000000000000000000", // wei
-  token: "ETH", // future-proof (ERC20)
-
-  status: "OPEN", 
-  // OPEN | IN_PROGRESS | SUBMITTED | COMPLETED | CANCELLED | DISPUTED
-
-  metadataURI: "ipfs://Qm...",
-  title: "Build smart contract",
-  description: "Full job details here",
-
-  tags: ["Solidity", "Web3"],
-
-  txHash: "0xabc",
-  createdAt: Date,
-  updatedAt: Date
-}
-
-// githubVerifications
-{
-  _id: ObjectId,
+profiles.update({
+  walletAddress: "0x456"
+}, {
+  $inc: {
+    reputation: 25,
+    completedJobs: 1
+  }
+})
+Also store:
+reputationLogs.insert({
   walletAddress: "0x456",
-  githubUsername: "rohit123",
+  jobId: 1,
+  score: 25
+})
+🔹 STEP 8: UI updates instantly
 
-  proofType: "PR_MERGED",
-  repo: "org/repo",
-  prNumber: 42,
+Frontend:
 
-  verified: true,
-  verificationTxHash: "0xabc",
+Refetch /jobs
+Refetch /profile
 
-  createdAt: Date
-}
+👉 Shows:
+
+Paid ✅
+Reputation increased
+🔄 Event Listener (your backend engine)
+
+This is the MOST critical backend component.
+
+It listens to:
+JobCreated
+JobAssigned
+JobSubmitted
+JobCompleted
+Tech:
+viem / ethers.js
+WebSocket RPC (Alchemy / Infura)
