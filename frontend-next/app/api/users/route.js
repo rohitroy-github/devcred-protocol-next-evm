@@ -1,3 +1,34 @@
+/**
+ * GET  /api/users
+ * POST /api/users
+ *
+ * Lightweight user identity endpoint for wallet-based accounts in MongoDB.
+ *
+ * --- GET ---
+ * Fetches a user by wallet address (provided as a query param).
+ *
+ * Workflow:
+ *   1. Client sends `walletAddress` in the query string.
+ *   2. Address is normalised (trim + lowercase) for consistent lookups.
+ *   3. Endpoint returns `user` if found, otherwise returns `user: null` with 200.
+ *
+ * Requirements:
+ *   - `walletAddress` (query param) : Required non-empty wallet address.
+ *
+ * --- POST ---
+ * Idempotently ensures a user record exists for a wallet address.
+ *
+ * Workflow:
+ *   1. Client sends `walletAddress` in the request body.
+ *   2. Endpoint normalises the address and performs an upsert.
+ *   3. If user exists, it is returned unchanged; if not, it is created.
+ *
+ * Requirements:
+ *   - `walletAddress` (body string) : Required non-empty wallet address.
+ *
+ * Response:
+ *   - `user` : Existing or newly created User document.
+ */
 import { NextResponse } from "next/server";
 import { connectMongoose, User } from "@/db";
 

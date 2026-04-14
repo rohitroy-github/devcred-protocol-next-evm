@@ -1,3 +1,26 @@
+/**
+ * POST /api/jobs/[id]/actions
+ *
+ * Off-chain sync endpoint for job state transitions triggered on-chain.
+ *
+ * Workflow:
+ *   1. A user initiates a job action (currently only "cancel") on the smart contract.
+ *   2. After the on-chain transaction is confirmed, the client calls this endpoint
+ *      to mirror that state change in the MongoDB database.
+ *   3. The endpoint validates the job ID and action, updates the Job document's
+ *      status to "CANCELLED", and records a JobEvent for audit/history purposes.
+ *
+ * Requirements:
+ *   - `id`     (URL param)   : Numeric job ID matching the on-chain jobId.
+ *   - `action` (body string) : Must be "cancel". Other actions are not yet supported.
+ *   - `actor`  (body string) : Wallet address of the user who triggered the action.
+ *                              Falls back to job.client if omitted.
+ *   - `txHash` (body string) : Transaction hash of the on-chain event (optional but recommended).
+ *                              Stored against the job and the event for traceability.
+ *
+ * This route is intentionally kept append-only for events — it never deletes
+ * existing JobEvent records, preserving a full audit trail.
+ */
 import { NextResponse } from "next/server";
 import { connectMongoose, Job, JobEvent } from "@/db";
 

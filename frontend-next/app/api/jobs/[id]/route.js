@@ -1,3 +1,23 @@
+/**
+ * GET /api/jobs/[id]
+ *
+ * Fetches the details of a single job and its full event history from the
+ * off-chain MongoDB database.
+ *
+ * Workflow:
+ *   1. The client provides a numeric job ID in the URL (matching the on-chain jobId).
+ *   2. The endpoint concurrently queries the Job document and all associated
+ *      JobEvent records, returning both in a single response.
+ *   3. Events are sorted newest-first to make it easy to display the latest
+ *      activity at the top of a job detail view.
+ *
+ * Requirements:
+ *   - `id` (URL param) : Numeric job ID. Must be a non-negative integer.
+ *
+ * Response:
+ *   - `job`    : The Job document (lean, read-only object).
+ *   - `events` : Array of JobEvent records for this job, ordered by timestamp descending.
+ */
 import { NextResponse } from "next/server";
 import { connectMongoose, Job, JobEvent } from "@/db";
 
