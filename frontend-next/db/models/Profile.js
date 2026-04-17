@@ -15,7 +15,6 @@ const ProfileSchema = new Schema(
       type: Number,
       required: true,
       min: 0,
-      index: true,
     },
     reputation: {
       type: Number,

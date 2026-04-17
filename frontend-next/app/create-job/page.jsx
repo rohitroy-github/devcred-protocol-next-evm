@@ -18,6 +18,19 @@ export default function CreateJobPage() {
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  async function readJsonSafely(response) {
+    const raw = await response.text();
+    if (!raw) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(raw);
+    } catch {
+      throw new Error("Server returned an invalid response.");
+    }
+  }
+
   function handleChange(event) {
     const { name, value } = event.target;
     setForm((prev) => ({ ...prev, [name]: value }));
@@ -46,11 +59,16 @@ export default function CreateJobPage() {
 
     try {
       // Step 1: Register/update user profile with wallet address
-      await fetch("/api/users", {
+      const userResponse = await fetch("/api/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ walletAddress }),
       });
+
+      const userResult = await readJsonSafely(userResponse);
+      if (!userResponse.ok) {
+        throw new Error(userResult?.error || "Failed to register wallet user.");
+      }
 
       setMessage("Submitting createJob transaction...");
 
@@ -79,7 +97,7 @@ export default function CreateJobPage() {
       });
 
       // Validate database operation succeeded
-      const result = await response.json();
+      const result = await readJsonSafely(response);
       if (!response.ok) {
         throw new Error(result?.error || "Failed to create job");
       }
@@ -118,7 +136,7 @@ export default function CreateJobPage() {
               value={form.title}
               onChange={handleChange}
               placeholder="Build profile page"
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900"
             />
           </div>
 
@@ -133,7 +151,7 @@ export default function CreateJobPage() {
               onChange={handleChange}
               rows={4}
               placeholder="Add wallet-based profile and status transitions"
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900"
             />
           </div>
 
@@ -149,7 +167,7 @@ export default function CreateJobPage() {
               value={form.budget}
               onChange={handleChange}
               placeholder="0.10"
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900"
             />
           </div>
 
@@ -164,7 +182,7 @@ export default function CreateJobPage() {
               value={form.developer}
               onChange={handleChange}
               placeholder="0x..."
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900"
             />
           </div>
 
@@ -179,7 +197,7 @@ export default function CreateJobPage() {
               value={form.metadataURI}
               onChange={handleChange}
               placeholder="ipfs://..."
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900"
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900"
             />
           </div>
 

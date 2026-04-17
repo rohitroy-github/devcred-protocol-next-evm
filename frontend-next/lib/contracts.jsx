@@ -22,6 +22,7 @@ export const DEV_CRED_ESCROW_ABI = [
   "event JobSubmitted(uint256 indexed jobId)",
   "event JobCompleted(uint256 indexed jobId)",
   "function createJob() external payable returns (uint256)",
+  "function nextJobId() external view returns (uint256)",
   "function assignDeveloper(uint256 jobId, address developer) external",
   "function submitWork(uint256 jobId) external",
   "function approveWork(uint256 jobId) external",

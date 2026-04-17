@@ -28,43 +28,69 @@ function normalizeWalletAddress(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
-export async function POST(request, { params }) {
-  const id = Number(params?.id);
+const actionConfig = {
+  assign: { status: "IN_PROGRESS", eventType: "JobAssigned" },
+  submit: { status: "SUBMITTED", eventType: "JobSubmitted" },
+  approve: { status: "COMPLETED", eventType: "JobCompleted" },
+  cancel: { status: "CANCELLED", eventType: "JobCancelled" },
+};
 
-  if (!Number.isInteger(id) || id < 0) {
-    return NextResponse.json({ error: "Invalid job id" }, { status: 400 });
+export async function POST(request, context) {
+  try {
+    const resolvedParams = await Promise.resolve(context?.params);
+    const id = Number(resolvedParams?.id);
+
+    if (!Number.isInteger(id) || id < 0) {
+      return NextResponse.json({ error: "Invalid job id" }, { status: 400 });
+    }
+
+    const body = await request.json();
+    const action = typeof body?.action === "string" ? body.action.trim().toLowerCase() : "";
+    const actor = normalizeWalletAddress(body?.actor);
+    const txHash = typeof body?.txHash === "string" ? body.txHash.trim() : "";
+    const developer = normalizeWalletAddress(body?.developer);
+
+    const config = actionConfig[action];
+    if (!config) {
+      return NextResponse.json(
+        { error: "Unsupported action. Use assign, submit, approve, or cancel." },
+        { status: 400 }
+      );
+    }
+
+    await connectMongoose();
+
+    const job = await Job.findOne({ jobId: id });
+    if (!job) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
+    job.status = config.status;
+
+    if (action === "assign" && developer) {
+      job.developer = developer;
+    }
+
+    if (txHash) {
+      job.txHash = txHash;
+    }
+
+    await job.save();
+
+    await JobEvent.create({
+      jobId: id,
+      eventType: config.eventType,
+      triggeredBy: actor || job.client,
+      txHash: txHash || `manual-${action}-${Date.now()}`,
+      blockNumber: 0,
+      timestamp: new Date(),
+    });
+
+    return NextResponse.json({ job }, { status: 200 });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error?.message || "Failed to sync job action." },
+      { status: 500 }
+    );
   }
-
-  const body = await request.json();
-  const action = typeof body?.action === "string" ? body.action.trim().toLowerCase() : "";
-  const actor = normalizeWalletAddress(body?.actor);
-  const txHash = typeof body?.txHash === "string" ? body.txHash.trim() : "";
-
-  if (action !== "cancel") {
-    return NextResponse.json({ error: "Only cancel sync is supported here" }, { status: 400 });
-  }
-
-  await connectMongoose();
-
-  const job = await Job.findOne({ jobId: id });
-  if (!job) {
-    return NextResponse.json({ error: "Job not found" }, { status: 404 });
-  }
-
-  job.status = "CANCELLED";
-  if (txHash) {
-    job.txHash = txHash;
-  }
-  await job.save();
-
-  await JobEvent.create({
-    jobId: id,
-    eventType: "JobCancelled",
-    triggeredBy: actor || job.client,
-    txHash: txHash || "chain-cancel-without-event",
-    blockNumber: 0,
-    timestamp: new Date(),
-  });
-
-  return NextResponse.json({ job }, { status: 200 });
 }

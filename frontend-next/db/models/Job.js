@@ -6,7 +6,6 @@ const JobSchema = new Schema(
       type: Number,
       required: true,
       min: 0,
-      index: true,
     },
     client: {
       type: String,

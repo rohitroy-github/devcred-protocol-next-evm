@@ -30,3 +30,16 @@ export async function getMongoDb() {
   const client = await clientPromise;
   return client.db(dbName);
 }
+
+export async function verifyConnection() {
+  try {
+    const db = await getMongoDb();
+    const admin = db.admin();
+    const status = await admin.ping();
+    console.log("✅ MongoDB connection successful:", status);
+    return true;
+  } catch (error) {
+    console.error("❌ MongoDB connection failed:", error.message);
+    return false;
+  }
+}

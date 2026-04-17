@@ -21,8 +21,9 @@
 import { NextResponse } from "next/server";
 import { connectMongoose, Job, JobEvent } from "@/db";
 
-export async function GET(_request, { params }) {
-  const id = Number(params?.id);
+export async function GET(_request, context) {
+  const resolvedParams = await Promise.resolve(context?.params);
+  const id = Number(resolvedParams?.id);
 
   if (!Number.isInteger(id) || id < 0) {
     return NextResponse.json({ error: "Invalid job id" }, { status: 400 });

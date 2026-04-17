@@ -11,7 +11,8 @@
     "clean": "hardhat clean",
     "deploy": "hardhat run scripts/deploy.Devcred.js",
     "deploy:localhost": "hardhat run scripts/deploy.Devcred.js --network localhost",
-    "listener": "node scripts/event-listener.js"
+    "listener": "node scripts/event-listener.js",
+    "db:clear": "node scripts/clear-db.js"
   },
   "keywords": [],
   "author": "",

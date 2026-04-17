@@ -25,8 +25,9 @@ function normalizeWalletAddress(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
-export async function GET(_request, { params }) {
-  const walletAddress = normalizeWalletAddress(params?.walletAddress);
+export async function GET(_request, context) {
+  const resolvedParams = await Promise.resolve(context?.params);
+  const walletAddress = normalizeWalletAddress(resolvedParams?.walletAddress);
 
   if (!walletAddress) {
     return NextResponse.json({ error: "walletAddress is required" }, { status: 400 });
@@ -38,6 +39,43 @@ export async function GET(_request, { params }) {
   if (!profile) {
     return NextResponse.json({ profile: null }, { status: 200 });
   }
+
+  return NextResponse.json({ profile }, { status: 200 });
+}
+
+export async function POST(request, context) {
+  const resolvedParams = await Promise.resolve(context?.params);
+  const walletAddress = normalizeWalletAddress(resolvedParams?.walletAddress);
+
+  if (!walletAddress) {
+    return NextResponse.json({ error: "walletAddress is required" }, { status: 400 });
+  }
+
+  const body = await request.json().catch(() => ({}));
+  const tokenId = Number(body?.tokenId);
+  const reputation = Number(body?.reputation ?? 0);
+  const completedJobs = Number(body?.completedJobs ?? 0);
+  const lastUpdatedBlock = Number(body?.lastUpdatedBlock ?? 0);
+
+  if (!Number.isInteger(tokenId) || tokenId < 1) {
+    return NextResponse.json({ error: "tokenId must be a positive integer" }, { status: 400 });
+  }
+
+  await connectMongoose();
+
+  const profile = await Profile.findOneAndUpdate(
+    { walletAddress },
+    {
+      $setOnInsert: { walletAddress },
+      $set: {
+        tokenId,
+        reputation: Number.isFinite(reputation) ? reputation : 0,
+        completedJobs: Number.isFinite(completedJobs) ? completedJobs : 0,
+        lastUpdatedBlock: Number.isFinite(lastUpdatedBlock) ? lastUpdatedBlock : 0,
+      },
+    },
+    { upsert: true, new: true }
+  ).lean();
 
   return NextResponse.json({ profile }, { status: 200 });
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import ProfileCard from "../../components/ProfileCard";
 import WalletButton from "../../components/WalletButton";
-import { mintProfileOnChain } from "../../lib/evm";
+import { getProfileOnChain, mintProfileOnChain } from "../../lib/evm";
 
 export default function ProfilePage() {
   const [walletAddress, setWalletAddress] = useState("");
@@ -11,9 +11,26 @@ export default function ProfilePage() {
   const [message, setMessage] = useState("");
   const [isMinting, setIsMinting] = useState(false);
 
+  async function syncProfileToDb(address, chainProfile) {
+    if (!address || !chainProfile) return;
+
+    await fetch(`/api/profiles/${address}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tokenId: chainProfile.tokenId,
+        reputation: chainProfile.reputation,
+        completedJobs: chainProfile.completedJobs,
+        lastUpdatedBlock: chainProfile.lastUpdatedBlock || 0,
+      }),
+    });
+  }
+
   useEffect(() => {
     async function loadProfile() {
       if (!walletAddress) return;
+
+      setMessage("");
 
       await fetch("/api/users", {
         method: "POST",
@@ -22,8 +39,20 @@ export default function ProfilePage() {
       });
 
       const response = await fetch(`/api/profiles/${walletAddress}`, { cache: "no-store" });
-      const result = await response.json();
-      setProfile(result.profile || null);
+      const result = await response.json().catch(() => ({}));
+
+      if (response.ok && result?.profile) {
+        setProfile(result.profile);
+        return;
+      }
+
+      const chainProfile = await getProfileOnChain(walletAddress);
+      setProfile(chainProfile || null);
+
+      if (chainProfile) {
+        await syncProfileToDb(walletAddress, chainProfile);
+        setMessage("Profile loaded from on-chain data. DB listener is not synced yet.");
+      }
     }
 
     loadProfile().catch(() => {
@@ -46,23 +75,38 @@ export default function ProfilePage() {
 
     try {
       setIsMinting(true);
+
+      const existingOnChainProfile = await getProfileOnChain(address);
+      if (existingOnChainProfile) {
+        setProfile(existingOnChainProfile);
+        await syncProfileToDb(address, existingOnChainProfile);
+        setMessage("Profile already exists on-chain. Loaded existing profile.");
+        return;
+      }
+
       setMessage("Submitting mintProfile transaction...");
       
       // Step 1: Execute blockchain transaction to mint profile NFT
       await mintProfileOnChain();
-      
-      // Step 2: Fetch updated profile data from backend API
-      // This pulls the minted profile details from database
-      const response = await fetch(`/api/profiles/${address}`, { cache: "no-store" });
-      const result = await response.json();
-      
-      // Step 3: Update local state with minted profile
-      setProfile(result.profile || null);
+
+      // Step 2: Read freshly minted profile from chain and sync it to DB
+      const mintedOnChainProfile = await getProfileOnChain(address);
+      setProfile(mintedOnChainProfile || null);
+      await syncProfileToDb(address, mintedOnChainProfile);
       
       // Success: Notify user that transaction is confirmed
       // Event listener will sync any additional state changes
       setMessage("Profile transaction confirmed. If listener is running, DB will reflect it.");
     } catch (error) {
+      const rawMessage = String(error?.message || "");
+      if (rawMessage.toLowerCase().includes("profile exists")) {
+        const existingOnChainProfile = await getProfileOnChain(address);
+        setProfile(existingOnChainProfile || null);
+        await syncProfileToDb(address, existingOnChainProfile);
+        setMessage("Profile already exists on-chain. Loaded existing profile.");
+        return;
+      }
+
       // Display error message to user (from blockchain or API)
       setMessage(error.message || "Failed to mint profile.");
     } finally {
@@ -87,14 +131,22 @@ export default function ProfilePage() {
             <h1 className="text-2xl font-bold text-zinc-900">Profile</h1>
             <p className="text-sm text-zinc-600">Mint and view DevCred profile NFT details.</p>
           </div>
-          <WalletButton
-            label={isMinting ? "Minting..." : "Mint Profile"}
-            onConnected={(address) => {
-              setWalletAddress(address);
-              handleMintProfile(address);
-            }}
-          />
+          <WalletButton label="Connect Wallet" onConnected={setWalletAddress} />
         </header>
+
+        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <button
+            type="button"
+            disabled={!walletAddress || isMinting || Boolean(profile?.tokenId)}
+            onClick={() => handleMintProfile(walletAddress)}
+            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isMinting ? "Minting..." : profile?.tokenId ? "Profile Minted" : "Mint Profile"}
+          </button>
+          {!walletAddress ? (
+            <p className="mt-2 text-sm text-zinc-600">Connect your wallet first to mint a profile.</p>
+          ) : null}
+        </div>
 
         {profileView ? (
           <ProfileCard profile={profileView} />
