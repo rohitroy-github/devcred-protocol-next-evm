@@ -1,5 +1,17 @@
 import Link from "next/link";
 
+export const metadata = {
+  title: "Home - Secure Freelance Jobs with On-Chain Escrow",
+  description:
+    "Join DevCred Protocol to browse Web3 jobs, build your developer profile with NFT credentials, and earn with smart contract-backed escrow. Reputation-driven freelance platform on blockchain.",
+  openGraph: {
+    title: "DevCred Protocol - Blockchain Developer Freelance Platform",
+    description:
+      "Secure jobs with on-chain escrow, transparent reputation scoring, and Web3 payments.",
+    url: "https://devcred.protocol",
+  },
+};
+
 export default function Home() {
   return (
     <main className="min-h-screen bg-zinc-50 px-6 py-8">
