@@ -18,6 +18,7 @@ export default function JobsPage() {
   const [jobs, setJobs] = useState([]);
   const [walletAddress, setWalletAddress] = useState("");
   const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState("ALL");
 
   useEffect(() => {
     async function loadJobs() {
@@ -47,15 +48,22 @@ export default function JobsPage() {
   }, [walletAddress]);
 
   const formattedJobs = useMemo(() => {
-    return jobs.map((job) => ({
+    let filtered = jobs.map((job) => ({
       id: job.jobId,
       client: job.client,
       developer: job.developer,
       description: job.description,
       amountEth: job.amount,
       status: statusLabelMap[job.status] || "Open",
+      rawStatus: job.status,
     }));
-  }, [jobs]);
+
+    if (statusFilter !== "ALL") {
+      filtered = filtered.filter((job) => job.rawStatus === statusFilter);
+    }
+
+    return filtered;
+  }, [jobs, statusFilter]);
 
   return (
     <main className="min-h-screen bg-zinc-50 px-6 py-10">
@@ -75,6 +83,22 @@ export default function JobsPage() {
             <WalletButton onConnected={setWalletAddress} />
           </div>
         </header>
+
+        <div className="flex items-center justify-end gap-3">
+          <label htmlFor="status-filter" className="text-sm font-medium text-zinc-700">
+            Filter by job status:
+          </label>
+          <select
+            id="status-filter"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-900 outline-none focus:border-zinc-900 bg-white cursor-pointer"
+          >
+            <option value="ALL">All</option>
+            <option value="OPEN">Open</option>
+            <option value="IN_PROGRESS">In Progress</option>
+          </select>
+        </div>
 
         <section className="grid gap-4 sm:grid-cols-2">
           {loading ? <p className="text-sm text-zinc-600">Loading jobs...</p> : null}
