@@ -12,18 +12,24 @@ export default function ProfilePage() {
   const [isMinting, setIsMinting] = useState(false);
 
   async function syncProfileToDb(address, chainProfile) {
-    if (!address || !chainProfile) return;
+    if (!address || !chainProfile) return false;
 
-    await fetch(`/api/profiles/${address}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tokenId: chainProfile.tokenId,
-        reputation: chainProfile.reputation,
-        completedJobs: chainProfile.completedJobs,
-        lastUpdatedBlock: chainProfile.lastUpdatedBlock || 0,
-      }),
-    });
+    try {
+      const response = await fetch(`/api/profiles/${address}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tokenId: chainProfile.tokenId,
+          reputation: chainProfile.reputation,
+          completedJobs: chainProfile.completedJobs,
+          lastUpdatedBlock: chainProfile.lastUpdatedBlock || 0,
+        }),
+      });
+
+      return response.ok;
+    } catch {
+      return false;
+    }
   }
 
   useEffect(() => {
@@ -50,7 +56,11 @@ export default function ProfilePage() {
       setProfile(chainProfile || null);
 
       if (chainProfile) {
-        await syncProfileToDb(walletAddress, chainProfile);
+        const isSynced = await syncProfileToDb(walletAddress, chainProfile);
+        if (!isSynced) {
+          setMessage("Failed to sync profile from chain to DB.");
+          return;
+        }
         setMessage("Profile loaded from on-chain data. DB listener is not synced yet.");
       }
     }
@@ -92,11 +102,15 @@ export default function ProfilePage() {
       // Step 2: Read freshly minted profile from chain and sync it to DB
       const mintedOnChainProfile = await getProfileOnChain(address);
       setProfile(mintedOnChainProfile || null);
-      await syncProfileToDb(address, mintedOnChainProfile);
-      
-      // Success: Notify user that transaction is confirmed
-      // Event listener will sync any additional state changes
-      setMessage("Profile transaction confirmed. If listener is running, DB will reflect it.");
+      const isSynced = await syncProfileToDb(address, mintedOnChainProfile);
+
+      if (mintedOnChainProfile && isSynced) {
+        setMessage("Profile successfully minted and synced with DB.");
+      } else if (mintedOnChainProfile) {
+        setMessage("Profile minted on-chain, but failed to sync with DB.");
+      } else {
+        setMessage("Profile minted, but failed to load on-chain profile.");
+      }
     } catch (error) {
       const rawMessage = String(error?.message || "");
       if (rawMessage.toLowerCase().includes("profile exists")) {
@@ -134,14 +148,14 @@ export default function ProfilePage() {
           <WalletButton label="Connect Wallet" onConnected={setWalletAddress} />
         </header>
 
-        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-zinc-200 bg-white p-5 text-center shadow-sm">
           <button
             type="button"
             disabled={!walletAddress || isMinting || Boolean(profile?.tokenId)}
             onClick={() => handleMintProfile(walletAddress)}
-            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
           >
-            {isMinting ? "Minting..." : profile?.tokenId ? "Profile Minted" : "Mint Profile"}
+            {isMinting ? "Minting..." : profile?.tokenId ? "Profile Minted" : "Mint Your Devcred Profile"}
           </button>
           {!walletAddress ? (
             <p className="mt-2 text-sm text-zinc-600">Connect your wallet first to mint a profile.</p>

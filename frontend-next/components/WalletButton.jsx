@@ -67,7 +67,7 @@ async function ensureLocalHardhatNetwork(provider) {
 
 function shortenAddress(address) {
   if (!address) return "";
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  return `${address.slice(0, 5)}...${address.slice(-5)}`;
 }
 
 export default function WalletButton({ label = "Connect Wallet", onConnected }) {
@@ -123,7 +123,7 @@ export default function WalletButton({ label = "Connect Wallet", onConnected }) 
     <button
       type="button"
       onClick={handleConnect}
-      className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-800"
+      className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-800 cursor-pointer"
     >
       {buttonLabel}
     </button>

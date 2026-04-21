@@ -51,6 +51,7 @@ export default function JobsPage() {
       id: job.jobId,
       client: job.client,
       developer: job.developer,
+      description: job.description,
       amountEth: job.amount,
       status: statusLabelMap[job.status] || "Open",
     }));

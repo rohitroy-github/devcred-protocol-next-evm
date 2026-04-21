@@ -1,0 +1,18 @@
+Live testings: 
+
+Profile Page
+  Profile minting successfully.
+  Minted profile syncing with DB successfully.
+  Mint profile button coming diaabled when existing profile / wallet address is logged in. 
+  Existing profile loading successfully.
+
+Create Job Page
+  Job being created successfully without developer assignment.
+  Job being created sucessfully with developer assignment.
+  Event log is getting erased after sometime after successfully creating and syncing the job.
+
+Job Page
+  Job events getting stored successfully. 
+  Job actions working successfully. 
+  Job address highlights made successfully. 
+  

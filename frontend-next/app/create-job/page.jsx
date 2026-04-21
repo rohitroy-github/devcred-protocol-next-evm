@@ -41,7 +41,7 @@ export default function CreateJobPage() {
    * 1. Registers or updates user wallet on backend
    * 2. Creates escrow job transaction on-chain (blockchain)
    * 3. Persists job details to MongoDB database
-   * 
+   *
    * Syncs off-chain data with on-chain state to maintain consistency
    * between smart contract and MongoDB records.
    */
@@ -51,6 +51,22 @@ export default function CreateJobPage() {
     // Validate that wallet is connected before proceeding
     if (!walletAddress) {
       setMessage("Connect wallet first.");
+      return;
+    }
+
+    // Validate required form fields
+    if (!form.title.trim()) {
+      setMessage("Job title is required.");
+      return;
+    }
+
+    if (!form.description.trim()) {
+      setMessage("Job description is required.");
+      return;
+    }
+
+    if (!form.budget || parseFloat(form.budget) <= 0) {
+      setMessage("Budget must be greater than 0.");
       return;
     }
 
@@ -66,49 +82,91 @@ export default function CreateJobPage() {
       });
 
       const userResult = await readJsonSafely(userResponse);
+
       if (!userResponse.ok) {
-        throw new Error(userResult?.error || "Failed to register wallet user.");
+        throw new Error(
+          userResult?.error ||
+            "Failed to register owner (connected wallet) in DB.",
+        );
       }
 
       setMessage("Submitting createJob transaction...");
 
-      // Step 2: Execute blockchain transaction to create escrow job
+      // Step 2: Execute blockchain transaction to create escrow job first
       // Returns jobId, client address, amount, and transaction hash
-      const txResult = await createJobOnChain({
-        amountEth: form.budget,
-        developer: form.developer,
-      });
-
-      // Step 3: Persist job data to MongoDB after on-chain confirmation
-      // Includes blockchain transaction hash for audit trail
-      const response = await fetch("/api/jobs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jobId: txResult.jobId,
-          client: txResult.client,
-          amount: txResult.amount,
-          title: form.title,
-          description: form.description,
+      let txResult;
+      try {
+        txResult = await createJobOnChain({
+          amountEth: form.budget,
           developer: form.developer,
-          metadataURI: form.metadataURI,
-          txHash: txResult.createTxHash,
-        }),
-      });
-
-      // Validate database operation succeeded
-      const result = await readJsonSafely(response);
-      if (!response.ok) {
-        throw new Error(result?.error || "Failed to create job");
+        });
+      } catch (txError) {
+        const txErrorMessage = String(txError?.message || "");
+        if (txErrorMessage.toLowerCase().includes("insufficient")) {
+          throw new Error("Insufficient funds or gas for transaction.");
+        } else if (txErrorMessage.toLowerCase().includes("rejected")) {
+          throw new Error("Transaction was rejected by wallet.");
+        } else {
+          throw new Error(txError?.message || "Failed to create job on-chain.");
+        }
       }
 
-      // Success: Reset form and notify user
-      // Event listener will sync additional state changes from blockchain
-      setMessage(`Job #${txResult.jobId} created on-chain. Listener sync will refresh DB state.`);
-      setForm(initialForm);
+      if (!txResult || !txResult.jobId) {
+        throw new Error(
+          "Transaction failed. No job ID was returned from blockchain.",
+        );
+      }
+
+      // Step 3: After on-chain confirmation, persist job data to DB
+      // Includes blockchain transaction hash for audit trail
+      let response;
+      try {
+        response = await fetch("/api/jobs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jobId: txResult.jobId,
+            client: txResult.client,
+            amount: txResult.amount,
+            title: form.title,
+            description: form.description,
+            developer: form.developer,
+            metadataURI: form.metadataURI,
+            txHash: txResult.createTxHash,
+          }),
+        });
+      } catch (dbError) {
+        // If DB sync fails, still show partial success since blockchain succeeded
+        console.error("DB sync error:", dbError);
+        setMessage(
+          `Job #${txResult.jobId} created on-chain, but failed to sync with DB. Please try again.`,
+        );
+        setForm(initialForm);
+        return;
+      }
+
+      const result = await readJsonSafely(response);
+
+      // Set message based on both blockchain and DB sync status
+      if (txResult && response.ok) {
+        setMessage(
+          `Job #${txResult.jobId} successfully created and synced with DB.`,
+        );
+        setForm(initialForm);
+        setTimeout(() => setMessage(""), 2000);
+      } else if (txResult && !response.ok) {
+        const dbErrorMsg = result?.error || "Unknown database error.";
+        setMessage(
+          `Job #${txResult.jobId} created on-chain, but failed to sync with DB: ${dbErrorMsg}`,
+        );
+      } else {
+        throw new Error("Job creation failed. No transaction ID returned.");
+      }
     } catch (error) {
       // Display error message to user (from blockchain or API)
-      setMessage(error.message || "Unexpected error");
+      const errorMsg = error?.message || "An unexpected error occurred.";
+      setMessage(errorMsg);
+      console.error("Job creation error:", error);
     } finally {
       // Always re-enable submit button, regardless of success/failure
       setIsSubmitting(false);
@@ -118,15 +176,22 @@ export default function CreateJobPage() {
   return (
     <main className="min-h-screen bg-zinc-50 px-6 py-10">
       <div className="mx-auto max-w-xl rounded-xl bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-bold text-zinc-900">Create Job</h1>
-        <div className="mt-2">
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-zinc-900">Create Job</h1>
+            <p className="mt-3 text-sm text-zinc-600">
+              Create an escrow job for your development needs.
+            </p>
+          </div>
           <WalletButton label="Connect Wallet" onConnected={setWalletAddress} />
         </div>
-        <p className="mt-3 text-sm text-zinc-600">Create an escrow job and persist it to MongoDB.</p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
-            <label htmlFor="title" className="mb-1 block text-sm font-medium text-zinc-700">
+            <label
+              htmlFor="title"
+              className="mb-1 block text-sm font-medium text-zinc-700"
+            >
               Title
             </label>
             <input
@@ -141,7 +206,10 @@ export default function CreateJobPage() {
           </div>
 
           <div>
-            <label htmlFor="description" className="mb-1 block text-sm font-medium text-zinc-700">
+            <label
+              htmlFor="description"
+              className="mb-1 block text-sm font-medium text-zinc-700"
+            >
               Description
             </label>
             <textarea
@@ -156,7 +224,10 @@ export default function CreateJobPage() {
           </div>
 
           <div>
-            <label htmlFor="budget" className="mb-1 block text-sm font-medium text-zinc-700">
+            <label
+              htmlFor="budget"
+              className="mb-1 block text-sm font-medium text-zinc-700"
+            >
               Budget (ETH)
             </label>
             <input
@@ -172,7 +243,27 @@ export default function CreateJobPage() {
           </div>
 
           <div>
-            <label htmlFor="developer" className="mb-1 block text-sm font-medium text-zinc-700">
+            <label
+              htmlFor="owner"
+              className="mb-1 block text-sm font-medium text-zinc-700"
+            >
+              Owner (Connected Wallet)
+            </label>
+            <input
+              id="owner"
+              name="owner"
+              type="text"
+              value={walletAddress}
+              disabled
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 bg-zinc-100 cursor-not-allowed outline-none"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="developer"
+              className="mb-1 block text-sm font-medium text-zinc-700"
+            >
               Developer Wallet (optional)
             </label>
             <input
@@ -187,7 +278,10 @@ export default function CreateJobPage() {
           </div>
 
           <div>
-            <label htmlFor="metadataURI" className="mb-1 block text-sm font-medium text-zinc-700">
+            <label
+              htmlFor="metadataURI"
+              className="mb-1 block text-sm font-medium text-zinc-700"
+            >
               Metadata URI (optional)
             </label>
             <input
@@ -204,7 +298,7 @@ export default function CreateJobPage() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
+            className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 cursor-pointer"
           >
             {isSubmitting ? "Creating..." : "Create Escrow Job"}
           </button>
