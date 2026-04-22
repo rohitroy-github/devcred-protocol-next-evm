@@ -11,6 +11,16 @@ const ProfileSchema = new Schema(
       trim: true,
       index: true,
     },
+    name: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    githubProfileUrl: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     tokenId: {
       type: Number,
       required: true,

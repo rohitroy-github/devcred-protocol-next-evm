@@ -56,6 +56,12 @@ export async function POST(request, context) {
   const reputation = Number(body?.reputation ?? 0);
   const completedJobs = Number(body?.completedJobs ?? 0);
   const lastUpdatedBlock = Number(body?.lastUpdatedBlock ?? 0);
+  const hasNameInput = typeof body?.name === "string";
+  const hasGithubProfileUrlInput = typeof body?.githubProfileUrl === "string";
+  const name = hasNameInput ? body.name.trim() : "";
+  const githubProfileUrl = hasGithubProfileUrlInput
+    ? body.githubProfileUrl.trim()
+    : "";
 
   if (!Number.isInteger(tokenId) || tokenId < 1) {
     return NextResponse.json({ error: "tokenId must be a positive integer" }, { status: 400 });
@@ -63,16 +69,26 @@ export async function POST(request, context) {
 
   await connectMongoose();
 
+  const setPayload = {
+    tokenId,
+    reputation: Number.isFinite(reputation) ? reputation : 0,
+    completedJobs: Number.isFinite(completedJobs) ? completedJobs : 0,
+    lastUpdatedBlock: Number.isFinite(lastUpdatedBlock) ? lastUpdatedBlock : 0,
+  };
+
+  if (hasNameInput) {
+    setPayload.name = name;
+  }
+
+  if (hasGithubProfileUrlInput) {
+    setPayload.githubProfileUrl = githubProfileUrl;
+  }
+
   const profile = await Profile.findOneAndUpdate(
     { walletAddress },
     {
       $setOnInsert: { walletAddress },
-      $set: {
-        tokenId,
-        reputation: Number.isFinite(reputation) ? reputation : 0,
-        completedJobs: Number.isFinite(completedJobs) ? completedJobs : 0,
-        lastUpdatedBlock: Number.isFinite(lastUpdatedBlock) ? lastUpdatedBlock : 0,
-      },
+      $set: setPayload,
     },
     { upsert: true, new: true }
   ).lean();
