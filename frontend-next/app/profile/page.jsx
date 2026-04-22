@@ -16,7 +16,6 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState(null);
   const [message, setMessage] = useState("");
   const [isMinting, setIsMinting] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [developerDetails, setDeveloperDetails] = useState(initialDeveloperDetails);
   const [isSavingDetails, setIsSavingDetails] = useState(false);
 
@@ -63,61 +62,47 @@ export default function ProfilePage() {
   }
 
   useEffect(() => {
-    /**
-     * Loads the developer profile whenever the connected wallet address changes.
-     *
-     * Workflow:
-     *  1. Register (or upsert) the wallet in MongoDB via POST /api/users.
-     *  2. Attempt to fetch the off-chain profile from MongoDB (GET /api/profiles/:wallet).
-     *     - If found → hydrate form fields with saved name/githubProfileUrl and exit.
-     *  3. If not in MongoDB, fall back to querying the smart contract directly.
-     *     - If no on-chain profile exists → profile stays null, user sees the Mint button.
-     *     - If an on-chain profile is found → sync it into MongoDB (chain data only,
-     *       no off-chain fields overwritten) and hydrate form state.
-     *
-     * The Mint button is disabled while this runs (isLoading) to prevent a duplicate
-     * mint attempt before we know whether the user already holds a profile NFT.
-     */
     async function loadProfile() {
       if (!walletAddress) return;
 
       setMessage("");
-      setIsLoading(true);
 
-      try {
-        await fetch("/api/users", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ walletAddress }),
-        });
+      await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress }),
+      });
 
-        const response = await fetch(`/api/profiles/${walletAddress}`, { cache: "no-store" });
-        const result = await response.json().catch(() => ({}));
+      const response = await fetch(`/api/profiles/${walletAddress}`, { cache: "no-store" });
+      const result = await response.json().catch(() => ({}));
 
-        if (response.ok && result?.profile) {
-          setProfile(result.profile);
-          setDeveloperDetails(hydrateDeveloperDetails(result.profile, walletAddress));
+      if (response.ok && result?.profile) {
+        setProfile(result.profile);
+        setDeveloperDetails(hydrateDeveloperDetails(result.profile, walletAddress));
+        return;
+      }
+
+      const chainProfile = await getProfileOnChain(walletAddress);
+      setProfile(chainProfile || null);
+      if (chainProfile) {
+        setDeveloperDetails(
+          hydrateDeveloperDetails(chainProfile, walletAddress),
+        );
+      }
+
+      if (chainProfile) {
+        const isSynced = await syncProfileToDb(walletAddress, chainProfile);
+        if (!isSynced) {
+          setMessage("Failed to sync profile from chain to DB.");
           return;
         }
-
-        const chainProfile = await getProfileOnChain(walletAddress);
-        setProfile(chainProfile || null);
-
-        if (chainProfile) {
-          setDeveloperDetails(hydrateDeveloperDetails(chainProfile, walletAddress));
-          const isSynced = await syncProfileToDb(walletAddress, chainProfile);
-          if (!isSynced) {
-            setMessage("Profile loaded but failed to sync to DB.");
-          }
-        }
-      } catch {
-        setMessage("Failed to load profile.");
-      } finally {
-        setIsLoading(false);
+        setMessage("Profile loaded from on-chain data. DB listener is not synced yet.");
       }
     }
 
-    loadProfile();
+    loadProfile().catch(() => {
+      setMessage("Failed to load profile.");
+    });
   }, [walletAddress]);
 
   /**
@@ -148,7 +133,7 @@ export default function ProfilePage() {
         return;
       }
 
-      setMessage("Submitting mintProfile transaction...");
+      setMessage("Submitting mintProfile transaction on-chain 🔃");
       
       // Step 1: Execute blockchain transaction to mint profile NFT
       await mintProfileOnChain();
@@ -261,11 +246,11 @@ export default function ProfilePage() {
         <div className="rounded-xl border border-zinc-200 bg-white p-5 text-center shadow-sm">
           <button
             type="button"
-            disabled={!walletAddress || isMinting || isLoading || Boolean(profile?.tokenId)}
+            disabled={!walletAddress || isMinting || Boolean(profile?.tokenId)}
             onClick={() => handleMintProfile(walletAddress)}
             className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
           >
-            {isMinting ? "Minting..." : isLoading ? "Loading..." : profile?.tokenId ? "Profile NFT Minted" : "Mint Your Devcred Profile"}
+            {isMinting ? "Minting..." : profile?.tokenId ? "Profile NFT Minted" : "Mint Your Devcred Profile"}
           </button>
           {!walletAddress ? (
             <p className="mt-2 text-sm text-zinc-600">Connect your wallet first to mint a profile.</p>

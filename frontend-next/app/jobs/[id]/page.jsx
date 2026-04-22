@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { FiCopy } from "react-icons/fi";
 import WalletButton from "../../../components/WalletButton";
 import {
   approveWorkOnChain,
@@ -80,6 +81,43 @@ export default function JobDetailsPage() {
     }
 
     return normalizeErrorMessage(txError, `Failed to ${actionLabel} on-chain.`);
+  }
+
+  async function handleCopyAddress(value, label = "Address") {
+    const address = typeof value === "string" ? value.trim() : "";
+    if (!address || address === "-" || address === "Unassigned") return;
+
+    try {
+      await navigator.clipboard.writeText(address);
+      setMessage(`${label} copied to clipboard.`);
+      setTimeout(() => setMessage(""), 2000);
+    } catch {
+      setMessage(`Failed to copy ${label.toLowerCase()}.`);
+    }
+  }
+
+  function renderAddressWithCopy(value, label, fallback = "-") {
+    const address = typeof value === "string" ? value : "";
+    const hasAddress = Boolean(address && address !== fallback && address !== "Unassigned");
+
+    return (
+      <span className="inline-flex items-center gap-2 align-middle">
+        <span className="rounded-md bg-zinc-200 px-1.5 py-0.5 font-[Montserrat] text-xs text-zinc-800">
+          {hasAddress ? address : fallback}
+        </span>
+        {hasAddress ? (
+          <button
+            type="button"
+            onClick={() => handleCopyAddress(address, label)}
+            aria-label={`Copy ${label}`}
+            title={`Copy ${label}`}
+            className="cursor-pointer rounded-full p-1 text-zinc-700 hover:bg-zinc-100"
+          >
+            <FiCopy className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        ) : null}
+      </span>
+    );
   }
 
   async function postJson(url, payload, contextLabel) {
@@ -235,8 +273,10 @@ export default function JobDetailsPage() {
         </div>
 
         <div className="mt-6 space-y-2 text-sm text-zinc-700">
-          <p>Client: <span className="rounded-md bg-zinc-200 px-1.5 py-0.5 font-[Montserrat] text-xs text-zinc-800">{job?.client || "-"}</span></p>
-          <p>Developer: <span className="rounded-md bg-zinc-200 px-1.5 py-0.5 font-[Montserrat] text-xs text-zinc-800">{job?.developer || "Unassigned"}</span></p>
+          <p>Client: {renderAddressWithCopy(job?.client, "Client wallet")}</p>
+          <p>
+            Developer: {renderAddressWithCopy(job?.developer, "Developer wallet", "Unassigned")}
+          </p>
           <p>Amount: {job?.amount || "0"} ETH</p>
           <p>Status: {statusLabel}</p>
         </div>
@@ -305,9 +345,19 @@ export default function JobDetailsPage() {
             {events.map((event) => (
               <li key={`${event.txHash}-${event.eventType}`}>
                 {event.eventType}{" "}
-                {event.eventType === "JobAssigned" && (event.recipient || assignedDeveloperLabel)
-                  ? `to ${event.recipient || assignedDeveloperLabel}`
-                  : `by ${event.triggeredBy}`}
+                {event.eventType === "JobAssigned" && (event.recipient || assignedDeveloperLabel) ? (
+                  <>
+                    to{" "}
+                    {renderAddressWithCopy(
+                      event.recipient || assignedDeveloperLabel,
+                      "Assigned developer",
+                    )}
+                  </>
+                ) : (
+                  <>
+                    by {renderAddressWithCopy(event.triggeredBy, "Triggered by")}
+                  </>
+                )}
               </li>
             ))}
             {events.length === 0 ? <li>No events yet.</li> : null}
