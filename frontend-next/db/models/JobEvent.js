@@ -32,6 +32,12 @@ const JobEventSchema = new Schema(
       min: 0,
       index: true,
     },
+    recipient: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: "",
+    },
     timestamp: {
       type: Date,
       required: true,

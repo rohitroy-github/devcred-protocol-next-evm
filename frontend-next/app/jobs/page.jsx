@@ -97,6 +97,7 @@ export default function JobsPage() {
             <option value="ALL">All</option>
             <option value="OPEN">Open</option>
             <option value="IN_PROGRESS">In Progress</option>
+            <option value="COMPLETED">Completed</option>
           </select>
         </div>
 

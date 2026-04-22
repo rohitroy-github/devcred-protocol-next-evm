@@ -34,6 +34,7 @@ export const metadata = {
   creator: "DevCred Protocol",
   publisher: "DevCred Protocol",
   robots: "index, follow",
+  manifest: "/manifest.json",
   openGraph: {
     type: "website",
     locale: "en_US",
@@ -58,9 +59,13 @@ export const metadata = {
       "Blockchain-powered developer credentials, freelance jobs, and smart contract escrow.",
     images: ["https://devcred.protocol/twitter-image.png"],
   },
-  viewport: "width=device-width, initial-scale=1, maximum-scale=5",
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
   themeColor: "#ffffff",
-  manifest: "/manifest.json",
 };
 
 export default function RootLayout({ children }) {

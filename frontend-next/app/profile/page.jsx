@@ -91,6 +91,7 @@ export default function ProfilePage() {
         setProfile(existingOnChainProfile);
         await syncProfileToDb(address, existingOnChainProfile);
         setMessage("Profile already exists on-chain. Loaded existing profile.");
+        setTimeout(() => setMessage(""), 2000);
         return;
       }
 
@@ -106,6 +107,7 @@ export default function ProfilePage() {
 
       if (mintedOnChainProfile && isSynced) {
         setMessage("Profile successfully minted and synced with DB.");
+        setTimeout(() => setMessage(""), 2000);
       } else if (mintedOnChainProfile) {
         setMessage("Profile minted on-chain, but failed to sync with DB.");
       } else {
@@ -118,6 +120,7 @@ export default function ProfilePage() {
         setProfile(existingOnChainProfile || null);
         await syncProfileToDb(address, existingOnChainProfile);
         setMessage("Profile already exists on-chain. Loaded existing profile.");
+        setTimeout(() => setMessage(""), 2000);
         return;
       }
 

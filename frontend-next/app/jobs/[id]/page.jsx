@@ -216,6 +216,9 @@ export default function JobDetailsPage() {
     return statusLabelMap[job?.status] || job?.status || "Unknown";
   }, [job]);
 
+  const assignedDeveloperLabel = job?.developer || developerInput || "";
+  const isJobLocked = job?.status === "CANCELLED" || job?.status === "COMPLETED";
+
   return (
     <main className="min-h-screen bg-zinc-50 px-6 py-10">
       <div className="mx-auto max-w-2xl rounded-xl bg-white p-6 shadow-sm">
@@ -264,26 +267,29 @@ export default function JobDetailsPage() {
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <button
             onClick={() => submitAction("assign")}
-            className="cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
+            disabled={Boolean(job?.developer) || job?.status === "IN_PROGRESS" || isJobLocked}
+            className="cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Assign Developer
           </button>
           <button
             onClick={() => submitAction("submit")}
-            className="cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700"
+            disabled={isJobLocked}
+            className="cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Submit Work
           </button>
           <button
             onClick={() => submitAction("approve")}
-            disabled={job?.status !== "SUBMITTED"}
+            disabled={job?.status !== "SUBMITTED" || isJobLocked}
             className="cursor-pointer rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Approve Work
           </button>
           <button
             onClick={() => submitAction("cancel")}
-            className="cursor-pointer rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100"
+            disabled={isJobLocked}
+            className="cursor-pointer rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Cancel Job
           </button>
@@ -298,7 +304,10 @@ export default function JobDetailsPage() {
           <ul className="mt-2 space-y-1 text-xs text-zinc-600">
             {events.map((event) => (
               <li key={`${event.txHash}-${event.eventType}`}>
-                {event.eventType} by {event.triggeredBy}
+                {event.eventType}{" "}
+                {event.eventType === "JobAssigned" && (event.recipient || assignedDeveloperLabel)
+                  ? `to ${event.recipient || assignedDeveloperLabel}`
+                  : `by ${event.triggeredBy}`}
               </li>
             ))}
             {events.length === 0 ? <li>No events yet.</li> : null}

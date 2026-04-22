@@ -22,7 +22,7 @@
  * existing JobEvent records, preserving a full audit trail.
  */
 import { NextResponse } from "next/server";
-import { connectMongoose, Job, JobEvent } from "@/db";
+import { connectMongoose, Job, JobEvent, Profile } from "@/db";
 
 function normalizeWalletAddress(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -77,10 +77,28 @@ export async function POST(request, context) {
 
     await job.save();
 
+    if (action === "approve" && job.developer) {
+      const reputationIncrement = Number.parseFloat(job.amount ?? 0);
+
+      await Profile.findOneAndUpdate(
+        { walletAddress: normalizeWalletAddress(job.developer) },
+        {
+          $inc: {
+            reputation: Number.isFinite(reputationIncrement)
+              ? reputationIncrement
+              : 0,
+            completedJobs: 1,
+          },
+        },
+        { new: true }
+      );
+    }
+
     await JobEvent.create({
       jobId: id,
       eventType: config.eventType,
       triggeredBy: actor || job.client,
+      recipient: action === "assign" ? developer : "",
       txHash: txHash || `manual-${action}-${Date.now()}`,
       blockNumber: 0,
       timestamp: new Date(),
