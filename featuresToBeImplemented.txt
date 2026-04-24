@@ -1,0 +1,34 @@
+Features to be implemented 
+
+4️⃣ Timeout / Auto-Resolution Logic
+Problem:
+Client disappears
+Dev stuck forever
+Add:
+uint256 deadline;
+
+If:
+
+client doesn’t respond → auto release funds
+Why:
+Removes dependency on trust
+
+1️⃣ Milestone-Based Payments
+Problem now:
+Single payment per job
+All-or-nothing → risky
+Upgrade:
+struct Milestone {
+    uint256 amount;
+    bool approved;
+}
+
+Flow:
+
+Client defines milestones
+Dev completes step-by-step
+Partial payouts
+Why it matters:
+Real freelance workflows
+Reduces disputes
+Improves adoption
