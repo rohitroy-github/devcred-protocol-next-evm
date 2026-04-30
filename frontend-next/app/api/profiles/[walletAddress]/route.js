@@ -57,8 +57,10 @@ export async function POST(request, context) {
   const completedJobs = Number(body?.completedJobs ?? 0);
   const lastUpdatedBlock = Number(body?.lastUpdatedBlock ?? 0);
   const hasNameInput = typeof body?.name === "string";
+  const hasBioInput = typeof body?.bio === "string";
   const hasGithubProfileUrlInput = typeof body?.githubProfileUrl === "string";
   const name = hasNameInput ? body.name.trim() : "";
+  const bio = hasBioInput ? body.bio.trim() : "";
   const githubProfileUrl = hasGithubProfileUrlInput
     ? body.githubProfileUrl.trim()
     : "";
@@ -78,6 +80,10 @@ export async function POST(request, context) {
 
   if (hasNameInput) {
     setPayload.name = name;
+  }
+
+  if (hasBioInput) {
+    setPayload.bio = bio;
   }
 
   if (hasGithubProfileUrlInput) {

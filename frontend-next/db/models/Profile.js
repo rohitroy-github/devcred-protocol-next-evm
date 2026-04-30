@@ -16,6 +16,12 @@ const ProfileSchema = new Schema(
       default: "",
       trim: true,
     },
+    bio: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 120,
+    },
     githubProfileUrl: {
       type: String,
       default: "",
@@ -49,6 +55,17 @@ const ProfileSchema = new Schema(
 );
 
 ProfileSchema.index({ tokenId: 1 }, { unique: true });
+
+if (mongoose.models.Profile && !mongoose.models.Profile.schema.path("bio")) {
+  mongoose.models.Profile.schema.add({
+    bio: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 120,
+    },
+  });
+}
 
 export default mongoose.models.Profile ||
   mongoose.model("Profile", ProfileSchema);

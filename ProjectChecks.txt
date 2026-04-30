@@ -8,8 +8,8 @@ Profile Page
 
 Create Job Page
   Job being created successfully without developer assignment.
-  Job being created sucessfully with developer assignment.
-  Event log is getting erased after sometime after successfully creating and syncing the job.
+  Job being created sucessfully with developer afterassignment.
+  Event log is getting erased after sometime  successfully creating and syncing the job.
 
 Job Page
   Job events getting stored successfully. 

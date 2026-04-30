@@ -8,6 +8,7 @@ import { getProfileOnChain, mintProfileOnChain } from "../../lib/evm";
 
 const initialDeveloperDetails = {
   name: "",
+  bio: "",
   githubProfileUrl: "",
   walletAddress: "",
 };
@@ -26,6 +27,7 @@ export default function ProfilePage() {
 
     return {
       name: profileData?.name || "",
+      bio: profileData?.bio || "",
       githubProfileUrl: profileData?.githubProfileUrl || "",
       walletAddress: resolvedWallet,
     };
@@ -43,6 +45,10 @@ export default function ProfilePage() {
 
     if (Object.prototype.hasOwnProperty.call(extraFields, "name")) {
       payload.name = extraFields.name;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(extraFields, "bio")) {
+      payload.bio = extraFields.bio;
     }
 
     if (Object.prototype.hasOwnProperty.call(extraFields, "githubProfileUrl")) {
@@ -189,6 +195,7 @@ export default function ProfilePage() {
     }
 
     const trimmedName = developerDetails.name.trim();
+    const trimmedBio = developerDetails.bio.trim();
     const trimmedGithubUrl = developerDetails.githubProfileUrl.trim();
 
     setIsSavingDetails(true);
@@ -203,6 +210,7 @@ export default function ProfilePage() {
           completedJobs: profile.completedJobs,
           lastUpdatedBlock: profile.lastUpdatedBlock || 0,
           name: trimmedName,
+          bio: trimmedBio,
           githubProfileUrl: trimmedGithubUrl,
         }),
       });
@@ -303,6 +311,26 @@ export default function ProfilePage() {
                     placeholder="https://github.com/username"
                     className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900"
                   />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="bio"
+                    className="mb-1 block text-sm font-medium text-zinc-700"
+                  >
+                    Bio
+                  </label>
+                  <input
+                    id="bio"
+                    name="bio"
+                    type="text"
+                    maxLength={120}
+                    value={developerDetails.bio}
+                    onChange={handleDeveloperDetailsChange}
+                    placeholder="Building reliable full-stack web3 products"
+                    className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900"
+                  />
+                  <p className="mt-1 text-xs text-zinc-500">Keep it to one line.</p>
                 </div>
 
                 <div>
