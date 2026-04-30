@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { FiCopy } from "react-icons/fi";
+import { FaEthereum } from "react-icons/fa";
 import WalletButton from "../../../components/WalletButton";
 import {
   autoReleaseFundsOnChain,
@@ -192,6 +193,11 @@ export default function JobDetailsPage() {
       return;
     }
 
+    if (action === "cancel" && !isClientActor) {
+      setMessage("Only the client can cancel this job.");
+      return;
+    }
+
     try {
       setMessage(`Submitting ${action} transaction on-chain 🔃.`);
 
@@ -262,7 +268,18 @@ export default function JobDetailsPage() {
     return statusLabelMap[job?.status] || job?.status || "Unknown";
   }, [job]);
 
+  const connectedWallet = String(walletAddress || "").trim().toLowerCase();
+  const jobClientWallet = String(job?.client || "").trim().toLowerCase();
+  const isClientActor =
+    Boolean(connectedWallet) &&
+    Boolean(jobClientWallet) &&
+    connectedWallet === jobClientWallet;
+
   const assignedDeveloperLabel = job?.developer || developerInput || "";
+  const isDeveloperAssigned =
+    Boolean(job?.developer) &&
+    job?.developer !== "Unassigned" &&
+    job?.developer !== "0x0000000000000000000000000000000000000000";
   const isJobLocked =
     job?.status === "CANCELLED" ||
     job?.status === "COMPLETED" ||
@@ -288,7 +305,10 @@ export default function JobDetailsPage() {
           <p>
             Developer: {renderAddressWithCopy(job?.developer, "Developer wallet", "Unassigned")}
           </p>
-          <p>Amount: {job?.amount || "0"} ETH</p>
+          <p className="inline-flex items-center gap-0.5">
+            Amount: {job?.amount || "0"}
+            <FaEthereum className="h-3.5 w-3.5 text-zinc-800" aria-hidden="true" />
+          </p>
           <p>Status: {statusLabel}</p>
         </div>
 
@@ -325,7 +345,7 @@ export default function JobDetailsPage() {
           </button>
           <button
             onClick={() => submitAction("submit")}
-            disabled={isJobLocked}
+            disabled={isJobLocked || !isDeveloperAssigned}
             className="cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Submit Work
@@ -340,13 +360,14 @@ export default function JobDetailsPage() {
           <button
             onClick={() => submitAction("autoRelease")}
             disabled={job?.status !== "SUBMITTED" || isJobLocked}
-            className="cursor-pointer rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="inline-flex cursor-pointer items-center justify-center gap-1 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Auto-Release Funds
+            Auto-Release Escrow
+            <FaEthereum className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
           <button
             onClick={() => submitAction("cancel")}
-            disabled={isJobLocked}
+            disabled={isJobLocked || !isClientActor}
             className="cursor-pointer rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Cancel Job
