@@ -33,6 +33,7 @@ const actionConfig = {
   submit: { status: "SUBMITTED", eventType: "JobSubmitted" },
   approve: { status: "COMPLETED", eventType: "JobCompleted" },
   cancel: { status: "CANCELLED", eventType: "JobCancelled" },
+  autorelease: { status: "AUTO_RELEASED", eventType: "AutoReleased" },
 };
 
 export async function POST(request, context) {
@@ -53,7 +54,7 @@ export async function POST(request, context) {
     const config = actionConfig[action];
     if (!config) {
       return NextResponse.json(
-        { error: "Unsupported action. Use assign, submit, approve, or cancel." },
+        { error: "Unsupported action. Use assign, submit, approve, cancel, or autoRelease." },
         { status: 400 }
       );
     }
@@ -77,7 +78,7 @@ export async function POST(request, context) {
 
     await job.save();
 
-    if (action === "approve" && job.developer) {
+    if ((action === "approve" || action === "autorelease") && job.developer) {
       const reputationIncrement = Number.parseFloat(job.amount ?? 0);
 
       await Profile.findOneAndUpdate(

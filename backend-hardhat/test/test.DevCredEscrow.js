@@ -43,6 +43,13 @@ describe("DevCredEscrow", function () {
   const JOB_SUBMITTED = 2n;
   const JOB_COMPLETED = 3n;
   const JOB_CANCELLED = 4n;
+  const JOB_AUTO_RELEASED = 5n;
+  const AUTO_RELEASE_TIMEOUT = 3 * 60; // seconds
+
+  async function advancePastAutoReleaseDeadline() {
+    await ethers.provider.send("evm_increaseTime", [AUTO_RELEASE_TIMEOUT + 1]);
+    await ethers.provider.send("evm_mine", []);
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Deployment
@@ -180,14 +187,19 @@ describe("DevCredEscrow", function () {
       expect(job.status).to.equal(JOB_SUBMITTED);
     });
 
-    it("emits JobSubmitted with jobId", async function () {
+    it("emits JobSubmitted with jobId and deadline", async function () {
       const { escrow, client, developer } = await deployEscrowFixture();
       await escrow.connect(client).createJob({ value: ONE_ETH });
       await escrow.connect(client).assignDeveloper(1, developer.address);
 
-      await expect(escrow.connect(developer).submitWork(1))
+      const tx = await escrow.connect(developer).submitWork(1);
+      const receipt = await tx.wait();
+      const block = await ethers.provider.getBlock(receipt.blockNumber);
+      const expectedDeadline = block.timestamp + AUTO_RELEASE_TIMEOUT;
+
+      await expect(tx)
         .to.emit(escrow, "JobSubmitted")
-        .withArgs(1);
+        .withArgs(1, expectedDeadline);
     });
 
     it("reverts if caller is not the developer", async function () {
@@ -380,6 +392,139 @@ describe("DevCredEscrow", function () {
       await expect(
         escrow.connect(client).cancelJob(0)
       ).to.be.revertedWith("Not client");
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // autoReleaseFunds
+  // ─────────────────────────────────────────────────────────────────────────
+  describe("autoReleaseFunds", function () {
+    async function setupSubmittedJob(fixture) {
+      const { escrow, client, developer } = fixture;
+      await escrow.connect(client).createJob({ value: ONE_ETH });
+      await escrow.connect(client).assignDeveloper(1, developer.address);
+      await escrow.connect(developer).submitWork(1);
+    }
+
+    it("developer can auto-release funds after deadline passes", async function () {
+      const f = await deployEscrowFixture();
+      await setupSubmittedJob(f);
+
+      await advancePastAutoReleaseDeadline();
+
+      // Developer calls autoReleaseFunds
+      await f.escrow.connect(f.developer).autoReleaseFunds(1);
+
+      const job = await f.escrow.jobs(1);
+      expect(job.status).to.equal(JOB_AUTO_RELEASED);
+    });
+
+    it("transfers locked ETH to developer on auto-release", async function () {
+      const f = await deployEscrowFixture();
+      await setupSubmittedJob(f);
+
+      await advancePastAutoReleaseDeadline();
+
+      const balanceBefore = await ethers.provider.getBalance(f.developer.address);
+      await f.escrow.connect(f.developer).autoReleaseFunds(1);
+      const balanceAfter = await ethers.provider.getBalance(f.developer.address);
+
+      // Developer received approximately ONE_ETH (minus gas)
+      expect(balanceAfter - balanceBefore).to.be.closeTo(ONE_ETH, ethers.parseEther("0.01"));
+    });
+
+    it("updates developer reputation after auto-release", async function () {
+      const f = await deployEscrowFixture();
+      await setupSubmittedJob(f);
+
+      await advancePastAutoReleaseDeadline();
+      await f.escrow.connect(f.developer).autoReleaseFunds(1);
+
+      const p = await f.profile.getProfile(f.developer.address);
+      expect(p.reputation).to.equal(ONE_ETH);
+      expect(p.completedJobs).to.equal(1);
+    });
+
+    it("escrow balance becomes 0 after auto-release", async function () {
+      const f = await deployEscrowFixture();
+      await setupSubmittedJob(f);
+
+      await advancePastAutoReleaseDeadline();
+      await f.escrow.connect(f.developer).autoReleaseFunds(1);
+
+      const balance = await ethers.provider.getBalance(await f.escrow.getAddress());
+      expect(balance).to.equal(0);
+    });
+
+    it("emits AutoReleased with jobId and amount", async function () {
+      const f = await deployEscrowFixture();
+      await setupSubmittedJob(f);
+
+      await advancePastAutoReleaseDeadline();
+
+      await expect(f.escrow.connect(f.developer).autoReleaseFunds(1))
+        .to.emit(f.escrow, "AutoReleased")
+        .withArgs(1, ONE_ETH);
+    });
+
+    it("reverts if caller is not the developer", async function () {
+      const f = await deployEscrowFixture();
+      await setupSubmittedJob(f);
+
+      await advancePastAutoReleaseDeadline();
+
+      await expect(
+        f.escrow.connect(f.other).autoReleaseFunds(1)
+      ).to.be.revertedWith("Only developer");
+    });
+
+    it("reverts if deadline has not been reached", async function () {
+      const f = await deployEscrowFixture();
+      await setupSubmittedJob(f);
+
+      // Do NOT fast-forward time; deadline should not have passed
+      await expect(
+        f.escrow.connect(f.developer).autoReleaseFunds(1)
+      ).to.be.revertedWith("Deadline not reached");
+    });
+
+    it("reverts if job is not in Submitted state", async function () {
+      const f = await deployEscrowFixture();
+      await f.escrow.connect(f.client).createJob({ value: ONE_ETH });
+      // Job is in Open state, not Submitted
+
+      await advancePastAutoReleaseDeadline();
+
+      await expect(
+        f.escrow.connect(f.developer).autoReleaseFunds(1)
+      ).to.be.revertedWith("Only developer");
+    });
+
+    it("reverts if submittedAt is 0 (work was never submitted)", async function () {
+      const f = await deployEscrowFixture();
+      await f.escrow.connect(f.client).createJob({ value: ONE_ETH });
+      await f.escrow.connect(f.client).assignDeveloper(1, f.developer.address);
+      // Do not submit work
+
+      await advancePastAutoReleaseDeadline();
+
+      await expect(
+        f.escrow.connect(f.developer).autoReleaseFunds(1)
+      ).to.be.revertedWith("Not submitted");
+    });
+
+    it("reverts if developer has no profile (reputation update guard)", async function () {
+      const f = await deployEscrowNoProfileFixture();
+      await f.escrow.connect(f.client).createJob({ value: ONE_ETH });
+      await f.escrow.connect(f.client).assignDeveloper(1, f.developer.address);
+      await f.escrow.connect(f.developer).submitWork(1);
+
+      await advancePastAutoReleaseDeadline();
+
+      // autoReleaseFunds will call updateReputation which requires developer to have a profile
+      await expect(
+        f.escrow.connect(f.developer).autoReleaseFunds(1)
+      ).to.be.revertedWith("No profile");
     });
   });
 });

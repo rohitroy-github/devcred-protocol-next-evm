@@ -42,6 +42,7 @@ const JobSchema = new Schema(
         "COMPLETED",
         "CANCELLED",
         "DISPUTED",
+        "AUTO_RELEASED",
       ],
       default: "OPEN",
     },

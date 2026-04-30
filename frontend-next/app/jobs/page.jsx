@@ -11,6 +11,7 @@ const statusLabelMap = {
   SUBMITTED: "Submitted",
   COMPLETED: "Completed",
   CANCELLED: "Cancelled",
+  AUTO_RELEASED: "AutoReleased",
   DISPUTED: "Cancelled",
 };
 
@@ -97,7 +98,9 @@ export default function JobsPage() {
             <option value="ALL">All</option>
             <option value="OPEN">Open</option>
             <option value="IN_PROGRESS">In Progress</option>
+            <option value="SUBMITTED">Submitted</option>
             <option value="COMPLETED">Completed</option>
+            <option value="AUTO_RELEASED">Auto Released</option>
           </select>
         </div>
 

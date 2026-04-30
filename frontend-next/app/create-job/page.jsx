@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import WalletButton from "../../components/WalletButton";
 import { createJobOnChain } from "../../lib/evm";
 
@@ -13,6 +14,7 @@ const initialForm = {
 };
 
 export default function CreateJobPage() {
+  const router = useRouter();
   const [form, setForm] = useState(initialForm);
   const [walletAddress, setWalletAddress] = useState("");
   const [message, setMessage] = useState("");
@@ -153,7 +155,10 @@ export default function CreateJobPage() {
           `Job #${txResult.jobId} successfully created and synced with DB.`,
         );
         setForm(initialForm);
-        setTimeout(() => setMessage(""), 2000);
+        setTimeout(() => {
+          setMessage("");
+          router.push("/jobs");
+        }, 2000);
       } else if (txResult && !response.ok) {
         const dbErrorMsg = result?.error || "Unknown database error.";
         setMessage(

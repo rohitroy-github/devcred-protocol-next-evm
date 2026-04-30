@@ -5,9 +5,11 @@ export const CONTRACTS = {
   },
   devCredEscrow: {
     address: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
-    functions: ["createJob", "assignDeveloper", "submitWork", "approveWork", "cancelJob"],
+    functions: ["createJob", "assignDeveloper", "submitWork", "approveWork", "cancelJob", "autoReleaseFunds"],
   },
 };
+
+export const AUTO_RELEASE_TIMEOUT_SECONDS = 5 * 60;
 
 export const DEV_CRED_PROFILE_ABI = [
   "event ProfileMinted(address indexed user, uint256 indexed tokenId)",
@@ -19,15 +21,18 @@ export const DEV_CRED_PROFILE_ABI = [
 export const DEV_CRED_ESCROW_ABI = [
   "event JobCreated(uint256 indexed jobId, address indexed client, uint256 amount)",
   "event JobAssigned(uint256 indexed jobId, address indexed developer)",
-  "event JobSubmitted(uint256 indexed jobId)",
+  "event JobSubmitted(uint256 indexed jobId, uint256 deadline)",
   "event JobCompleted(uint256 indexed jobId)",
+  "event AutoReleased(uint256 indexed jobId, uint256 amountReleased)",
   "function createJob() external payable returns (uint256)",
   "function nextJobId() external view returns (uint256)",
+  "function AUTO_RELEASE_TIMEOUT() external view returns (uint256)",
   "function assignDeveloper(uint256 jobId, address developer) external",
   "function submitWork(uint256 jobId) external",
   "function approveWork(uint256 jobId) external",
   "function cancelJob(uint256 jobId) external",
-  "function jobs(uint256 jobId) external view returns (address client, address developer, uint256 amount, uint8 status)",
+  "function autoReleaseFunds(uint256 jobId) external",
+  "function jobs(uint256 jobId) external view returns (address client, address developer, uint256 amount, uint8 status, uint256 submittedAt)",
 ];
 
-export const JOB_STATUS = ["Open", "InProgress", "Submitted", "Completed", "Cancelled"];
+export const JOB_STATUS = ["Open", "InProgress", "Submitted", "Completed", "Cancelled", "AutoReleased"];

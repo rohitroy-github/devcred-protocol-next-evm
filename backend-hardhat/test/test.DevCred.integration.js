@@ -1,3 +1,4 @@
+const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
@@ -105,7 +106,7 @@ describe("DevCred — Full Integration", function () {
       // Step 3: developer submits work
       await expect(escrow.connect(developer).submitWork(1))
         .to.emit(escrow, "JobSubmitted")
-        .withArgs(1);
+        .withArgs(1, anyValue);
 
       job = await escrow.jobs(1);
       expect(job.status).to.equal(2n); // Submitted

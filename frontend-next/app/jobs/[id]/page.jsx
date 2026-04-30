@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { FiCopy } from "react-icons/fi";
 import WalletButton from "../../../components/WalletButton";
 import {
+  autoReleaseFundsOnChain,
   approveWorkOnChain,
   assignDeveloperOnChain,
   cancelJobOnChain,
@@ -17,6 +18,7 @@ const statusLabelMap = {
   SUBMITTED: "Submitted",
   COMPLETED: "Completed",
   CANCELLED: "Cancelled",
+  AUTO_RELEASED: "AutoReleased",
   DISPUTED: "Disputed",
 };
 
@@ -64,6 +66,7 @@ export default function JobDetailsPage() {
         submit: "submit work",
         approve: "approve work",
         cancel: "cancel job",
+        autoRelease: "auto-release funds",
       }[action] || action;
 
     const message = String(txError?.message || "").toLowerCase();
@@ -218,6 +221,11 @@ export default function JobDetailsPage() {
           const cancelResult = await cancelJobOnChain(job.jobId);
           txHash = cancelResult.txHash;
         }
+
+        if (action === "autoRelease") {
+          const autoReleaseResult = await autoReleaseFundsOnChain(job.jobId);
+          txHash = autoReleaseResult.txHash;
+        }
       } catch (txError) {
         throw new Error(mapActionTxError(action, txError));
       }
@@ -255,7 +263,10 @@ export default function JobDetailsPage() {
   }, [job]);
 
   const assignedDeveloperLabel = job?.developer || developerInput || "";
-  const isJobLocked = job?.status === "CANCELLED" || job?.status === "COMPLETED";
+  const isJobLocked =
+    job?.status === "CANCELLED" ||
+    job?.status === "COMPLETED" ||
+    job?.status === "AUTO_RELEASED";
 
   return (
     <main className="min-h-screen bg-zinc-50 px-6 py-10">
@@ -325,6 +336,13 @@ export default function JobDetailsPage() {
             className="cursor-pointer rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Approve Work
+          </button>
+          <button
+            onClick={() => submitAction("autoRelease")}
+            disabled={job?.status !== "SUBMITTED" || isJobLocked}
+            className="cursor-pointer rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Auto-Release Funds
           </button>
           <button
             onClick={() => submitAction("cancel")}

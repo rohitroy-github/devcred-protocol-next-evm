@@ -245,3 +245,16 @@ export async function cancelJobOnChain(jobId) {
   const receipt = await tx.wait();
   return { txHash: receipt.hash };
 }
+
+export async function autoReleaseFundsOnChain(jobId) {
+  const signer = await getSigner();
+  const escrow = new Contract(
+    CONTRACTS.devCredEscrow.address,
+    DEV_CRED_ESCROW_ABI,
+    signer
+  );
+
+  const tx = await escrow.autoReleaseFunds(jobId);
+  const receipt = await tx.wait();
+  return { txHash: receipt.hash };
+}

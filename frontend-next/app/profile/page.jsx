@@ -260,7 +260,7 @@ export default function ProfilePage() {
 
         {profileView ? (
           <div className="grid gap-6 lg:grid-cols-2">
-            <Profil eCard profile={profileView} />
+            <ProfileCard profile={profileView} />
 
             <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-semibold text-zinc-900">Developer Details</h2>
