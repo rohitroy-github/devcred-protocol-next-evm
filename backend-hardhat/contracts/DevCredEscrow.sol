@@ -212,7 +212,7 @@ contract DevCredEscrow {
         Job storage job = jobs[jobId];
 
         require(msg.sender == job.client, "Not client");
-        require(job.status == JobStatus.Open, "Cannot cancel after assignment");
+        require(job.status == JobStatus.Open, "Cannot cancel");
 
         // Transition to cancelled state
         job.status = JobStatus.Cancelled;
