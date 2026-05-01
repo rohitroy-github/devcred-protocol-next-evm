@@ -1,6 +1,34 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
+/*
+Developer Testing Workflow (DevCredProfile)
+
+Test Type: Unit Test Suite
+
+This suite validates profile NFT and reputation behavior:
+  1. Deployment/Wiring
+    - Owner assignment and ERC721 metadata
+    - Initial token counter state
+
+  2. Profile Minting
+    - One profile per address
+    - addressToProfile mapping and token ownership
+    - Event emission and initialization values
+
+  3. Reputation Updates
+    - onlyOwner access control
+    - Accumulation of reputation/completedJobs
+    - Guard rails for missing profiles
+
+  4. Read APIs and Ownership Transfer
+    - getProfile correctness before/after updates
+    - transferOwnership and post-transfer permissions
+
+  5. ERC721 Baseline Checks
+    - balanceOf and ownerOf behavior after mint
+*/
+
 describe("DevCredProfile", function () {
   // ─────────────────────────────────────────────────────────────────────────
   // Fixture
