@@ -6,6 +6,7 @@ import "./DevCredProfile.sol";
 /**
  * @title DevCredEscrow
  * @dev Escrow contract that manages the job lifecycle and fund distribution
+ * Supports both single-payment and milestone-based payment workflows
  * Implements a 4-step workflow: Create → Assign → Submit → Approve
  * Uses escrow to secure funds during job execution and releases payment upon completion
  */
@@ -16,6 +17,9 @@ contract DevCredEscrow {
     // Auto-release timeout: if client doesn't approve within this period after submission, dev can auto-release
     // Set to 3 minutes for testing; use 30 days for production
     uint256 public constant AUTO_RELEASE_TIMEOUT = 3 minutes;
+    
+    // Maximum number of milestones per job
+    uint256 public constant MAX_MILESTONES = 3;
 
     /**
      * @dev Initializes the escrow contract and links it to the profile contract
@@ -39,12 +43,37 @@ contract DevCredEscrow {
     }
 
     /**
+     * @dev Represents the different states a milestone can be in
+     */
+    enum MilestoneStatus {
+        Pending,    // Milestone created, awaiting dev work
+        Submitted,  // Developer submitted milestone for review
+        Approved,   // Client approved, payment released
+        Rejected    // Client rejected, dev must resubmit
+    }
+
+    /**
+     * @dev Represents a milestone within a job
+     * @param amount ETH amount for this milestone
+     * @param status Current status of the milestone
+     * @param submittedAt Timestamp when milestone was submitted
+     */
+    struct Milestone {
+        uint256 amount;
+        MilestoneStatus status;
+        uint256 submittedAt;
+    }
+
+    /**
      * @dev Represents a job posting with parties involved and escrow details
      * @param client Address of the client who created and funds the job
      * @param developer Address of the developer assigned to the job
-     * @param amount ETH amount held in escrow for this job
+     * @param amount ETH amount held in escrow for this job (single-payment mode)
      * @param status Current lifecycle state of the job
      * @param submittedAt Timestamp when work was submitted (used for auto-release timeout)
+     * @param milestones Array of milestones if using milestone-based payment
+     * @param currentMilestoneIndex Current milestone being worked on (for milestone mode)
+     * @param isMilestoneJob Whether this job uses milestone-based payments
      */
     struct Job {
         address client;
@@ -52,6 +81,9 @@ contract DevCredEscrow {
         uint256 amount;
         JobStatus status;
         uint256 submittedAt;
+        Milestone[] milestones;
+        uint256 currentMilestoneIndex;
+        bool isMilestoneJob;
     }
 
     // Counter for generating unique job IDs
@@ -61,7 +93,7 @@ contract DevCredEscrow {
     mapping(uint256 => Job) public jobs;
 
     // Emitted when a client creates a new job and deposits funds
-    event JobCreated(uint256 jobId, address client, uint256 amount);
+    event JobCreated(uint256 jobId, address client, uint256 amount, bool isMilestoneJob);
     
     // Emitted when a developer is assigned to a job
     event JobAssigned(uint256 jobId, address developer);
@@ -75,9 +107,25 @@ contract DevCredEscrow {
     // Emitted when funds are auto-released due to timeout
     event AutoReleased(uint256 jobId, uint256 amountReleased);
 
+    // Emitted when a milestone is submitted by developer
+    event MilestoneSubmitted(uint256 jobId, uint256 milestoneIndex, uint256 deadline);
+    
+    // Emitted when a milestone is approved by client and payment released
+    event MilestoneApproved(uint256 jobId, uint256 milestoneIndex, uint256 amountReleased);
+    
+    // Emitted when a milestone is rejected by client
+    event MilestoneRejected(uint256 jobId, uint256 milestoneIndex);
+    
+    // Emitted when all milestones are completed and job is finished
+    event AllMilestonesCompleted(uint256 jobId);
+    
+    // Emitted when milestone auto-releases due to timeout
+    event MilestoneAutoReleased(uint256 jobId, uint256 milestoneIndex, uint256 amountReleased);
+
     /**
      * @dev Step 1️⃣ of job workflow: Client creates a job and deposits ETH as escrow
      * Job starts in Open state waiting for developer assignment
+     * Single-payment mode (non-milestone)
      * @return jobId The unique identifier for the created job
      */
     function createJob() external payable returns (uint256) {
@@ -85,15 +133,59 @@ contract DevCredEscrow {
 
         // Increment counter and create new job entry
         nextJobId++;
-        jobs[nextJobId] = Job({
-            client: msg.sender,
-            developer: address(0),  // No developer assigned yet
-            amount: msg.value,      // ETH locked in escrow
-            status: JobStatus.Open,
-            submittedAt: 0          // No submission yet
-        });
+        Job storage newJob = jobs[nextJobId];
+        newJob.client = msg.sender;
+        newJob.developer = address(0);
+        newJob.amount = msg.value;
+        newJob.status = JobStatus.Open;
+        newJob.submittedAt = 0;
+        newJob.isMilestoneJob = false;
+        newJob.currentMilestoneIndex = 0;
 
-        emit JobCreated(nextJobId, msg.sender, msg.value);
+        emit JobCreated(nextJobId, msg.sender, msg.value, false);
+        return nextJobId;
+    }
+
+    /**
+     * @dev Create a job with milestone-based payments
+     * Client defines multiple milestones, each with its own amount
+     * Developer completes and gets paid for each milestone separately
+     * @param milestoneAmounts Array of ETH amounts for each milestone (max 3)
+     * @return jobId The unique identifier for the created milestone job
+     */
+    function createJobWithMilestones(uint256[] calldata milestoneAmounts) external payable returns (uint256) {
+        require(milestoneAmounts.length > 0, "At least one milestone required");
+        require(milestoneAmounts.length <= MAX_MILESTONES, "Too many milestones");
+        
+        uint256 totalAmount = 0;
+        for (uint256 i = 0; i < milestoneAmounts.length; i++) {
+            require(milestoneAmounts[i] > 0, "Milestone amount must be > 0");
+            totalAmount += milestoneAmounts[i];
+        }
+        
+        require(msg.value == totalAmount, "Total payment must match milestone amounts");
+
+        // Increment counter and create new milestone job
+        nextJobId++;
+        Job storage newJob = jobs[nextJobId];
+        newJob.client = msg.sender;
+        newJob.developer = address(0);
+        newJob.amount = totalAmount;
+        newJob.status = JobStatus.Open;
+        newJob.submittedAt = 0;
+        newJob.isMilestoneJob = true;
+        newJob.currentMilestoneIndex = 0;
+
+        // Create milestones
+        for (uint256 i = 0; i < milestoneAmounts.length; i++) {
+            newJob.milestones.push(Milestone({
+                amount: milestoneAmounts[i],
+                status: MilestoneStatus.Pending,
+                submittedAt: 0
+            }));
+        }
+
+        emit JobCreated(nextJobId, msg.sender, totalAmount, true);
         return nextJobId;
     }
 
@@ -212,12 +304,199 @@ contract DevCredEscrow {
         Job storage job = jobs[jobId];
 
         require(msg.sender == job.client, "Not client");
-        require(job.status == JobStatus.Open, "Cannot cancel");
+        require(job.status == JobStatus.Open, "Cannot cancel after assignment");
 
         // Transition to cancelled state
         job.status = JobStatus.Cancelled;
 
         // Refund escrowed funds to the client
         payable(job.client).transfer(job.amount);
+    }
+
+    // ====== MILESTONE FUNCTIONS ======
+
+    /**
+     * @dev Developer submits a milestone for client review
+     * Only available for milestone-based jobs
+     * @param jobId The ID of the milestone job
+     */
+    function submitMilestone(uint256 jobId) external {
+        Job storage job = jobs[jobId];
+
+        require(job.isMilestoneJob, "Not a milestone job");
+        require(msg.sender == job.developer, "Not developer");
+        require(job.status == JobStatus.InProgress, "Invalid job state");
+        
+        uint256 currentIdx = job.currentMilestoneIndex;
+        require(currentIdx < job.milestones.length, "All milestones completed");
+        
+        Milestone storage milestone = job.milestones[currentIdx];
+        require(milestone.status == MilestoneStatus.Pending, "Milestone not pending");
+
+        // Mark milestone as submitted
+        milestone.status = MilestoneStatus.Submitted;
+        milestone.submittedAt = block.timestamp;
+        uint256 deadline = block.timestamp + AUTO_RELEASE_TIMEOUT;
+
+        emit MilestoneSubmitted(jobId, currentIdx, deadline);
+    }
+
+    /**
+     * @dev Client approves a submitted milestone and releases partial payment
+     * Only the client can approve milestones
+     * @param jobId The ID of the milestone job
+     */
+    function approveMilestone(uint256 jobId) external {
+        Job storage job = jobs[jobId];
+
+        require(job.isMilestoneJob, "Not a milestone job");
+        require(msg.sender == job.client, "Not client");
+        require(job.status == JobStatus.InProgress, "Invalid job state");
+        
+        uint256 currentIdx = job.currentMilestoneIndex;
+        require(currentIdx < job.milestones.length, "All milestones completed");
+        
+        Milestone storage milestone = job.milestones[currentIdx];
+        require(milestone.status == MilestoneStatus.Submitted, "Milestone not submitted");
+
+        // Approve milestone and release payment
+        milestone.status = MilestoneStatus.Approved;
+        uint256 milestoneAmount = milestone.amount;
+        
+        // Transfer payment to developer
+        payable(job.developer).transfer(milestoneAmount);
+
+        // Update reputation for this milestone
+        profileContract.updateReputation(job.developer, milestoneAmount, 0);
+
+        emit MilestoneApproved(jobId, currentIdx, milestoneAmount);
+
+        // Check if all milestones are completed
+        if (currentIdx + 1 >= job.milestones.length) {
+            // All milestones completed, mark job as completed
+            job.status = JobStatus.Completed;
+            profileContract.updateReputation(job.developer, 0, 1);  // Increment job count
+            emit AllMilestonesCompleted(jobId);
+            emit JobCompleted(jobId);
+        } else {
+            // Move to next milestone
+            job.currentMilestoneIndex = currentIdx + 1;
+        }
+    }
+
+    /**
+     * @dev Client rejects a submitted milestone
+     * Developer must resubmit the same milestone
+     * @param jobId The ID of the milestone job
+     */
+    function rejectMilestone(uint256 jobId) external {
+        Job storage job = jobs[jobId];
+
+        require(job.isMilestoneJob, "Not a milestone job");
+        require(msg.sender == job.client, "Not client");
+        require(job.status == JobStatus.InProgress, "Invalid job state");
+        
+        uint256 currentIdx = job.currentMilestoneIndex;
+        require(currentIdx < job.milestones.length, "Invalid milestone index");
+        
+        Milestone storage milestone = job.milestones[currentIdx];
+        require(milestone.status == MilestoneStatus.Submitted, "Milestone not submitted");
+
+        // Revert to pending
+        milestone.status = MilestoneStatus.Pending;
+        milestone.submittedAt = 0;
+
+        emit MilestoneRejected(jobId, currentIdx);
+    }
+
+    /**
+     * @dev Auto-release milestone if client doesn't approve within AUTO_RELEASE_TIMEOUT
+     * Can be called by developer after timeout has passed
+     * @param jobId The ID of the milestone job
+     */
+    function autoReleaseMilestone(uint256 jobId) external {
+        Job storage job = jobs[jobId];
+
+        require(job.isMilestoneJob, "Not a milestone job");
+        require(msg.sender == job.developer, "Only developer");
+        require(job.status == JobStatus.InProgress, "Invalid job state");
+        
+        uint256 currentIdx = job.currentMilestoneIndex;
+        require(currentIdx < job.milestones.length, "All milestones completed");
+        
+        Milestone storage milestone = job.milestones[currentIdx];
+        require(milestone.status == MilestoneStatus.Submitted, "Milestone not submitted");
+        require(milestone.submittedAt > 0, "Not submitted");
+        
+        uint256 deadline = milestone.submittedAt + AUTO_RELEASE_TIMEOUT;
+        require(block.timestamp > deadline, "Deadline not reached");
+
+        // Auto-approve milestone
+        milestone.status = MilestoneStatus.Approved;
+        uint256 milestoneAmount = milestone.amount;
+        
+        // Transfer payment to developer
+        payable(job.developer).transfer(milestoneAmount);
+
+        // Update reputation
+        profileContract.updateReputation(job.developer, milestoneAmount, 0);
+
+        emit MilestoneAutoReleased(jobId, currentIdx, milestoneAmount);
+
+        // Check if all milestones are completed
+        if (currentIdx + 1 >= job.milestones.length) {
+            // All milestones completed
+            job.status = JobStatus.Completed;
+            profileContract.updateReputation(job.developer, 0, 1);  // Increment job count
+            emit AllMilestonesCompleted(jobId);
+            emit JobCompleted(jobId);
+        } else {
+            // Move to next milestone
+            job.currentMilestoneIndex = currentIdx + 1;
+        }
+    }
+
+    /**
+     * @dev Get milestone details for a job
+     * @param jobId The ID of the job
+     * @param milestoneIndex The index of the milestone
+     * @return amount The milestone amount
+     * @return status The milestone status
+     * @return submittedAt The timestamp when submitted
+     */
+    function getMilestone(uint256 jobId, uint256 milestoneIndex) 
+        external 
+        view 
+        returns (uint256 amount, MilestoneStatus status, uint256 submittedAt) 
+    {
+        require(milestoneIndex < jobs[jobId].milestones.length, "Invalid milestone index");
+        Milestone storage milestone = jobs[jobId].milestones[milestoneIndex];
+        return (milestone.amount, milestone.status, milestone.submittedAt);
+    }
+
+    /**
+     * @dev Get all milestones for a job
+     * @param jobId The ID of the job
+     * @return Array of milestones
+     */
+    function getJobMilestones(uint256 jobId) 
+        external 
+        view 
+        returns (Milestone[] memory) 
+    {
+        return jobs[jobId].milestones;
+    }
+
+    /**
+     * @dev Get the count of milestones for a job
+     * @param jobId The ID of the job
+     * @return Number of milestones
+     */
+    function getMilestoneCount(uint256 jobId) 
+        external 
+        view 
+        returns (uint256) 
+    {
+        return jobs[jobId].milestones.length;
     }
 }

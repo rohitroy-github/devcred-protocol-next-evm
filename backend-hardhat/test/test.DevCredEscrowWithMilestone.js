@@ -1,13 +1,46 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
-describe("DevCredEscrowWithMilestone", function () {
+/*
+Developer Testing Workflow (Milestone Escrow)
+
+Test Type: Integration Test Suite
+
+This suite validates only milestone-based escrow behavior:
+  1. Deployment/Wiring
+	  - Escrow links to Profile contract
+	  - Core constants (MAX_MILESTONES, counters) are correct
+
+  2. Milestone Job Creation
+	  - createJobWithMilestones stores expected metadata
+	  - Milestones are initialized correctly
+	  - Funding amount exactly matches milestone sum
+
+  3. Milestone Lifecycle
+	  - Assign -> Submit -> Approve/Reject per milestone
+	  - Proper progression of currentMilestoneIndex
+	  - Final milestone completes job and updates completedJobs
+
+  4. Timeout and Recovery Paths
+	  - autoReleaseMilestone after deadline
+	  - Rejection/resubmission flow
+	  - Access control and invalid state guards
+
+  5. View/Read APIs and Integration Flows
+	  - getMilestone/getJobMilestones/getMilestoneCount correctness
+	  - End-to-end multi-milestone scenarios (approve, reject, mixed auto-release)
+
+Single-payment (non-milestone) behavior is intentionally excluded here and
+covered in test.DevCredEscrowWithoutMilestone.js.
+*/
+
+describe("DevCredEscrowWithMilestoneFeature", function () {
 	async function deployMilestoneEscrowFixture() {
 		const [owner, client, developer, other] = await ethers.getSigners();
 
 		const profile = await ethers.deployContract("DevCredProfile");
 		const EscrowFactory = await ethers.getContractFactory(
-			"contracts/DevCredEscrowWithMilestone.sol:DevCredEscrow",
+			"contracts/DevCredEscrow.sol:DevCredEscrow",
 		);
 		const escrow = await EscrowFactory.deploy(await profile.getAddress());
 		await escrow.waitForDeployment();
@@ -23,7 +56,7 @@ describe("DevCredEscrowWithMilestone", function () {
 
 		const profile = await ethers.deployContract("DevCredProfile");
 		const EscrowFactory = await ethers.getContractFactory(
-			"contracts/DevCredEscrowWithMilestone.sol:DevCredEscrow",
+			"contracts/DevCredEscrow.sol:DevCredEscrow",
 		);
 		const escrow = await EscrowFactory.deploy(await profile.getAddress());
 		await escrow.waitForDeployment();
