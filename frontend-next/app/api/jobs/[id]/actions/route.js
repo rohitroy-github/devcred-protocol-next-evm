@@ -28,6 +28,26 @@ function normalizeWalletAddress(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
+function resolveTriggeredBy(action, job, actor) {
+  const normalizedClient = normalizeWalletAddress(job?.client);
+  const normalizedDeveloper = normalizeWalletAddress(job?.developer);
+
+  if (action === "submit" || action === "submitmilestone") {
+    return normalizedDeveloper || actor || normalizedClient;
+  }
+
+  if (
+    action === "approve" ||
+    action === "approvemilestone" ||
+    action === "rejectmilestone" ||
+    action === "cancel"
+  ) {
+    return normalizedClient || actor;
+  }
+
+  return actor || normalizedClient;
+}
+
 const actionConfig = {
   assign: { status: "IN_PROGRESS", eventType: "JobAssigned" },
   submit: { status: "SUBMITTED", eventType: "JobSubmitted" },
@@ -148,10 +168,12 @@ export async function POST(request, context) {
       );
     }
 
+    const triggeredBy = resolveTriggeredBy(action, job, actor);
+
     await JobEvent.create({
       jobId: id,
       eventType: config.eventType,
-      triggeredBy: actor || job.client,
+      triggeredBy,
       recipient: action === "assign" ? developer : "",
       txHash: txHash || `manual-${action}-${Date.now()}`,
       blockNumber: 0,

@@ -30,6 +30,20 @@ DevCred addresses both with smart contracts and event-driven indexing:
 - developer gets assigned and submits work
 - client approves completion to release funds
 
+### Milestone-Based Payments
+
+- clients can split one job into multiple milestones (up to 3)
+- each milestone has an independent amount and review cycle
+- developers can get paid incrementally as each milestone is approved
+- final job completion is triggered when all milestones are approved
+
+### Auto-Release Safety
+
+- both single-payment and milestone flows support timeout-based auto-release
+- after submission, if the client does not respond before the deadline, the developer can trigger auto-release
+- this prevents funds from being stuck indefinitely in escrow
+- keeps project momentum when review cycles are delayed
+
 ### Reputation and Work History
 
 - on-chain history of completed work
@@ -52,8 +66,16 @@ DevCred addresses both with smart contracts and event-driven indexing:
 ## Smart Contracts
 
 - `DevCredProfile.sol`: profile NFT and developer reputation context
-- `DevCredEscrow.sol`: escrow and job lifecycle (`Create -> Assign -> Submit -> Approve`)
+- `DevCredEscrow.sol`: escrow and job lifecycle (`Create -> Assign -> Submit -> Approve`), milestone workflow, and timeout-based auto-release
 - `Starter.sol`: local starter/reference contract
+
+## Why These Features Matter for Developers
+
+- faster cash flow: milestone approvals unlock partial payouts instead of waiting for full-project completion
+- lower payment risk: auto-release protects developers from stalled client approvals
+- stronger trust signal: milestone completion and payout events are recorded for transparent work history
+- better delivery rhythm: milestone checkpoints encourage structured execution and feedback
+- reduced dispute friction: explicit states (Pending, Submitted, Approved, Rejected) make progress and responsibility clear
 
 ## Repository Structure
 
@@ -187,6 +209,8 @@ This repository already includes:
 - Next.js UI routes for jobs and profiles
 - API routes backed by MongoDB models
 - event-listener hooks for synchronization workflows
+- milestone job support across contracts, APIs, and UI timeline views
+- auto-release flows for both full-job and per-milestone payouts
 
 ## Vision
 
