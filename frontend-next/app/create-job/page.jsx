@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import WalletButton from "../../components/WalletButton";
-import { createJobOnChain } from "../../lib/evm";
+import { createJobOnChain, createJobWithMilestonesOnChain } from "../../lib/evm";
 
 const initialForm = {
   title: "",
@@ -11,6 +11,8 @@ const initialForm = {
   budget: "",
   developer: "",
   metadataURI: "",
+  isMilestoneJob: false,
+  milestones: [],
 };
 
 export default function CreateJobPage() {
@@ -19,6 +21,10 @@ export default function CreateJobPage() {
   const [walletAddress, setWalletAddress] = useState("");
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [jobType, setJobType] = useState("single"); // "single" or "milestone"
+  const totalMilestoneBudget = form.milestones
+    .reduce((sum, value) => sum + parseFloat(value || 0), 0)
+    .toFixed(4);
 
   async function readJsonSafely(response) {
     const raw = await response.text();
@@ -36,6 +42,35 @@ export default function CreateJobPage() {
   function handleChange(event) {
     const { name, value } = event.target;
     setForm((prev) => ({ ...prev, [name]: value }));
+  }
+
+  function handleJobTypeChange(type) {
+    setJobType(type);
+    setForm((prev) => ({
+      ...prev,
+      isMilestoneJob: type === "milestone",
+      milestones: [],
+      budget: "",
+    }));
+  }
+
+  function handleMilestoneChange(index, value) {
+    const newMilestones = [...form.milestones];
+    newMilestones[index] = value;
+    setForm((prev) => ({ ...prev, milestones: newMilestones }));
+  }
+
+  function addMilestone() {
+    if (form.milestones.length < 3) {
+      setForm((prev) => ({ ...prev, milestones: [...prev.milestones, ""] }));
+    }
+  }
+
+  function removeMilestone(index) {
+    setForm((prev) => ({
+      ...prev,
+      milestones: prev.milestones.filter((_, i) => i !== index),
+    }));
   }
 
   /**
@@ -67,9 +102,24 @@ export default function CreateJobPage() {
       return;
     }
 
-    if (!form.budget || parseFloat(form.budget) <= 0) {
-      setMessage("Budget must be greater than 0.");
-      return;
+    // Validate budget for single-payment jobs
+    if (jobType === "single") {
+      if (!form.budget || parseFloat(form.budget) <= 0) {
+        setMessage("Budget must be greater than 0.");
+        return;
+      }
+    } else {
+      // Validate milestones for milestone-based jobs
+      if (form.milestones.length === 0) {
+        setMessage("Add at least one milestone.");
+        return;
+      }
+
+      const validMilestones = form.milestones.every((m) => parseFloat(m) > 0);
+      if (!validMilestones) {
+        setMessage("Each milestone amount must be greater than 0.");
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -98,10 +148,18 @@ export default function CreateJobPage() {
       // Returns jobId, client address, amount, and transaction hash
       let txResult;
       try {
-        txResult = await createJobOnChain({
-          amountEth: form.budget,
-          developer: form.developer,
-        });
+        if (jobType === "milestone") {
+          setMessage("Submitting createJobWithMilestones transaction...");
+          txResult = await createJobWithMilestonesOnChain({
+            milestoneAmounts: form.milestones,
+            developer: form.developer,
+          });
+        } else {
+          txResult = await createJobOnChain({
+            amountEth: form.budget,
+            developer: form.developer,
+          });
+        }
       } catch (txError) {
         const txErrorMessage = String(txError?.message || "");
         if (txErrorMessage.toLowerCase().includes("insufficient")) {
@@ -123,19 +181,29 @@ export default function CreateJobPage() {
       // Includes blockchain transaction hash for audit trail
       let response;
       try {
+        const jobPayload = {
+          jobId: txResult.jobId,
+          client: txResult.client,
+          title: form.title,
+          description: form.description,
+          developer: form.developer,
+          metadataURI: form.metadataURI,
+          txHash: txResult.createTxHash,
+          isMilestoneJob: txResult.isMilestoneJob ?? false,
+        };
+
+        // Add amount or milestones based on job type
+        if (txResult.isMilestoneJob) {
+          jobPayload.milestones = txResult.milestoneAmounts;
+          jobPayload.amount = txResult.totalAmount;
+        } else {
+          jobPayload.amount = txResult.amount;
+        }
+
         response = await fetch("/api/jobs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jobId: txResult.jobId,
-            client: txResult.client,
-            amount: txResult.amount,
-            title: form.title,
-            description: form.description,
-            developer: form.developer,
-            metadataURI: form.metadataURI,
-            txHash: txResult.createTxHash,
-          }),
+          body: JSON.stringify(jobPayload),
         });
       } catch (dbError) {
         // If DB sync fails, still show partial success since blockchain succeeded
@@ -228,24 +296,114 @@ export default function CreateJobPage() {
             />
           </div>
 
+          {/* Job Type Selection */}
           <div>
-            <label
-              htmlFor="budget"
-              className="mb-1 block text-sm font-medium text-zinc-700"
-            >
-              Budget (ETH)
+            <label className="mb-1 block text-sm font-medium text-zinc-700">
+              Payment Type
             </label>
-            <input
-              id="budget"
-              name="budget"
-              type="number"
-              step="0.01"
-              value={form.budget}
-              onChange={handleChange}
-              placeholder="0.10"
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900"
-            />
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => handleJobTypeChange("single")}
+                className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                  jobType === "single"
+                    ? "bg-zinc-900 text-white"
+                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                }`}
+              >
+                Single Payment
+              </button>
+              <button
+                type="button"
+                onClick={() => handleJobTypeChange("milestone")}
+                className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                  jobType === "milestone"
+                    ? "bg-zinc-900 text-white"
+                    : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                }`}
+              >
+                Milestone-Based
+              </button>
+            </div>
           </div>
+
+          {/* Single Payment Budget */}
+          {jobType === "single" && (
+            <div>
+              <label
+                htmlFor="budget"
+                className="mb-1 block text-sm font-medium text-zinc-700"
+              >
+                Budget (ETH)
+              </label>
+              <input
+                id="budget"
+                name="budget"
+                type="number"
+                step="0.01"
+                value={form.budget}
+                onChange={handleChange}
+                placeholder="0.10"
+                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900"
+              />
+            </div>
+          )}
+
+          {/* Milestone Amounts */}
+          {jobType === "milestone" && (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Milestones (max 3)
+              </label>
+              <div className="space-y-3">
+                {form.milestones.map((amount, index) => (
+                  <div key={index} className="flex gap-2">
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={amount}
+                      onChange={(e) => handleMilestoneChange(index, e.target.value)}
+                      placeholder={`Milestone ${index + 1} (ETH)`}
+                      className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeMilestone(index)}
+                      className="rounded-lg bg-red-100 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-200 cursor-pointer"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                {form.milestones.length < 3 && (
+                  <button
+                    type="button"
+                    onClick={addMilestone}
+                    className="w-full rounded-lg border border-dashed border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 cursor-pointer"
+                  >
+                    + Add Milestone
+                  </button>
+                )}
+              </div>
+
+              <div className="mt-3">
+                <label
+                  htmlFor="totalBudget"
+                  className="mb-1 block text-sm font-medium text-zinc-700"
+                >
+                  Total Budget (ETH)
+                </label>
+                <input
+                  id="totalBudget"
+                  name="totalBudget"
+                  type="text"
+                  value={totalMilestoneBudget}
+                  disabled
+                  className="w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm text-zinc-900 cursor-not-allowed outline-none"
+                />
+              </div>
+            </div>
+          )}
 
           <div>
             <label

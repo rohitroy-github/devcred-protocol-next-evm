@@ -62,6 +62,19 @@ function normalizeWalletAddress(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
+function normalizeAmount(value) {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return "";
+}
+
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
@@ -83,12 +96,24 @@ export async function POST(request) {
 
     const jobId = Number(body?.jobId);
     const client = normalizeWalletAddress(body?.client);
-    const amount = typeof body?.amount === "string" ? body.amount.trim() : "";
+    const amount = normalizeAmount(body?.amount);
     const title = typeof body?.title === "string" ? body.title.trim() : "";
     const description = typeof body?.description === "string" ? body.description.trim() : "";
     const metadataURI = typeof body?.metadataURI === "string" ? body.metadataURI.trim() : "";
     const developer = normalizeWalletAddress(body?.developer);
     const txHash = typeof body?.txHash === "string" ? body.txHash.trim() : "";
+    const isMilestoneJob = Boolean(body?.isMilestoneJob);
+
+    const milestones = Array.isArray(body?.milestones)
+      ? body.milestones
+          .map((entry, index) => ({
+            index,
+            amount: normalizeAmount(entry),
+            status: "Pending",
+            submittedAt: null,
+          }))
+          .filter((entry) => entry.amount)
+      : [];
 
     if (!Number.isInteger(jobId) || jobId < 1 || !client || !amount || !title || !description) {
       return NextResponse.json(
@@ -97,30 +122,58 @@ export async function POST(request) {
       );
     }
 
+    if (isMilestoneJob && milestones.length === 0) {
+      return NextResponse.json(
+        { error: "Milestone job must include at least one milestone amount" },
+        { status: 400 }
+      );
+    }
+
     await connectMongoose();
 
-    const job = await Job.create({
-      jobId,
-      client,
-      developer,
-      amount,
-      token: "ETH",
-      status: developer ? "IN_PROGRESS" : "OPEN",
-      metadataURI,
-      title,
-      description,
-      tags: Array.isArray(body?.tags) ? body.tags : [],
-      txHash,
-    });
+    const job = await Job.findOneAndUpdate(
+      { jobId },
+      {
+        $set: {
+          client,
+          developer,
+          amount,
+          token: "ETH",
+          status: developer ? "IN_PROGRESS" : "OPEN",
+          metadataURI,
+          title,
+          description,
+          tags: Array.isArray(body?.tags) ? body.tags : [],
+          txHash,
+          isMilestoneJob,
+          milestones: isMilestoneJob ? milestones : [],
+          currentMilestoneIndex: 0,
+        },
+      },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      }
+    );
 
-    await JobEvent.create({
-      jobId,
-      eventType: "JobCreated",
-      triggeredBy: client,
-      txHash: txHash || `manual-create-${Date.now()}`,
-      blockNumber: 0,
-      timestamp: new Date(),
-    });
+    await JobEvent.findOneAndUpdate(
+      { txHash: txHash || `manual-create-${jobId}`, eventType: "JobCreated" },
+      {
+        $setOnInsert: {
+          jobId,
+          eventType: "JobCreated",
+          triggeredBy: client,
+          txHash: txHash || `manual-create-${jobId}`,
+          blockNumber: 0,
+          timestamp: new Date(),
+        },
+        $set: {
+          isMilestoneJob,
+        },
+      },
+      { upsert: true, new: true }
+    );
 
     return NextResponse.json({ job }, { status: 201 });
   } catch (error) {

@@ -34,6 +34,10 @@ const actionConfig = {
   approve: { status: "COMPLETED", eventType: "JobCompleted" },
   cancel: { status: "CANCELLED", eventType: "JobCancelled" },
   autorelease: { status: "AUTO_RELEASED", eventType: "AutoReleased" },
+  submitmilestone: { status: "IN_PROGRESS", eventType: "MilestoneSubmitted" },
+  approvemilestone: { status: "IN_PROGRESS", eventType: "MilestoneApproved" },
+  rejectmilestone: { status: "IN_PROGRESS", eventType: "MilestoneRejected" },
+  autoreleasemilestone: { status: "IN_PROGRESS", eventType: "MilestoneAutoReleased" },
 };
 
 export async function POST(request, context) {
@@ -54,7 +58,7 @@ export async function POST(request, context) {
     const config = actionConfig[action];
     if (!config) {
       return NextResponse.json(
-        { error: "Unsupported action. Use assign, submit, approve, cancel, or autoRelease." },
+        { error: "Unsupported action. Use assign, submit, approve, cancel, autoRelease, submitMilestone, approveMilestone, rejectMilestone, or autoReleaseMilestone." },
         { status: 400 }
       );
     }
@@ -66,6 +70,20 @@ export async function POST(request, context) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
+    const isMilestoneAction = [
+      "submitmilestone",
+      "approvemilestone",
+      "rejectmilestone",
+      "autoreleasemilestone",
+    ].includes(action);
+
+    if (isMilestoneAction && !job.isMilestoneJob) {
+      return NextResponse.json(
+        { error: "Milestone actions are only supported for milestone jobs." },
+        { status: 400 }
+      );
+    }
+
     job.status = config.status;
 
     if (action === "assign" && developer) {
@@ -74,6 +92,41 @@ export async function POST(request, context) {
 
     if (txHash) {
       job.txHash = txHash;
+    }
+
+    let milestoneIndex = null;
+
+    if (isMilestoneAction) {
+      milestoneIndex = Number(job.currentMilestoneIndex || 0);
+      if (!Array.isArray(job.milestones) || milestoneIndex >= job.milestones.length) {
+        return NextResponse.json({ error: "Invalid milestone index." }, { status: 400 });
+      }
+
+      const milestone = job.milestones[milestoneIndex];
+      const now = new Date();
+
+      if (action === "submitmilestone") {
+        milestone.status = "Submitted";
+        milestone.submittedAt = now;
+      }
+
+      if (action === "rejectmilestone") {
+        milestone.status = "Pending";
+        milestone.submittedAt = null;
+        milestone.deadline = null;
+      }
+
+      if (action === "approvemilestone" || action === "autoreleasemilestone") {
+        milestone.status = "Approved";
+
+        const isLastMilestone = milestoneIndex + 1 >= job.milestones.length;
+        if (isLastMilestone) {
+          job.status = "COMPLETED";
+        } else {
+          job.currentMilestoneIndex = milestoneIndex + 1;
+          job.status = "IN_PROGRESS";
+        }
+      }
     }
 
     await job.save();
@@ -103,6 +156,12 @@ export async function POST(request, context) {
       txHash: txHash || `manual-${action}-${Date.now()}`,
       blockNumber: 0,
       timestamp: new Date(),
+      milestoneIndex,
+      amountReleased:
+        action === "approvemilestone" || action === "autoreleasemilestone"
+          ? String(job.milestones?.[milestoneIndex]?.amount || "")
+          : "",
+      isMilestoneJob: Boolean(job.isMilestoneJob),
     });
 
     return NextResponse.json({ job }, { status: 200 });

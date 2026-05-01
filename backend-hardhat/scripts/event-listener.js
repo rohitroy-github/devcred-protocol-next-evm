@@ -4,10 +4,18 @@ const { ethers } = require("ethers");
 const { MongoClient, ServerApiVersion } = require("mongodb");
 
 const ESCROW_ABI = [
-  "event JobCreated(uint256 indexed jobId, address indexed client, uint256 amount)",
+  // Single-payment events
+  "event JobCreated(uint256 jobId, address client, uint256 amount, bool isMilestoneJob)",
   "event JobAssigned(uint256 indexed jobId, address indexed developer)",
-  "event JobSubmitted(uint256 indexed jobId)",
+  "event JobSubmitted(uint256 jobId, uint256 deadline)",
   "event JobCompleted(uint256 indexed jobId)",
+  "event AutoReleased(uint256 indexed jobId, uint256 amountReleased)",
+  // Milestone events
+  "event MilestoneSubmitted(uint256 jobId, uint256 milestoneIndex, uint256 deadline)",
+  "event MilestoneApproved(uint256 jobId, uint256 milestoneIndex, uint256 amountReleased)",
+  "event MilestoneRejected(uint256 jobId, uint256 milestoneIndex)",
+  "event AllMilestonesCompleted(uint256 indexed jobId)",
+  "event MilestoneAutoReleased(uint256 jobId, uint256 milestoneIndex, uint256 amountReleased)",
 ];
 
 const PROFILE_ABI = [
@@ -83,7 +91,7 @@ async function main() {
     }
   });
 
-  escrow.on("JobCreated", async (jobId, client, amount, event) => {
+  escrow.on("JobCreated", async (jobId, client, amount, isMilestoneJob, event) => {
     try {
       await jobs.updateOne(
         { jobId: Number(jobId) },
@@ -101,6 +109,7 @@ async function main() {
           $set: {
             amount: ethers.formatEther(amount),
             status: "OPEN",
+            isMilestoneJob: isMilestoneJob ?? false,
             txHash: event.log.transactionHash,
             updatedAt: new Date(),
           },
@@ -119,11 +128,14 @@ async function main() {
             blockNumber: event.log.blockNumber,
             timestamp: new Date(),
           },
+          $set: {
+            isMilestoneJob: isMilestoneJob ?? false,
+          },
         },
         { upsert: true }
       );
 
-      console.log(`JobCreated synced for #${Number(jobId)}`);
+      console.log(`JobCreated synced for #${Number(jobId)} (Milestone: ${isMilestoneJob ? "Yes" : "No"})`);
     } catch (error) {
       console.error("JobCreated sync failed", error);
     }
@@ -165,7 +177,7 @@ async function main() {
     }
   });
 
-  escrow.on("JobSubmitted", async (jobId, event) => {
+  escrow.on("JobSubmitted", async (jobId, deadline, event) => {
     try {
       const job = await jobs.findOne({ jobId: Number(jobId) });
       await jobs.updateOne(
@@ -173,6 +185,7 @@ async function main() {
         {
           $set: {
             status: "SUBMITTED",
+            submittedAt: new Date(Number(deadline) * 1000),
             txHash: event.log.transactionHash,
             updatedAt: new Date(),
           },
@@ -189,6 +202,9 @@ async function main() {
             txHash: event.log.transactionHash,
             blockNumber: event.log.blockNumber,
             timestamp: new Date(),
+          },
+          $set: {
+            deadline: new Date(Number(deadline) * 1000),
           },
         },
         { upsert: true }
@@ -254,6 +270,165 @@ async function main() {
       console.log(`JobCompleted synced for #${Number(jobId)}`);
     } catch (error) {
       console.error("JobCompleted sync failed", error);
+    }
+  });
+
+  // ===== MILESTONE EVENT HANDLERS =====
+
+  escrow.on("MilestoneSubmitted", async (jobId, milestoneIndex, deadline, event) => {
+    try {
+      await jobEvents.updateOne(
+        { txHash: event.log.transactionHash, eventType: "MilestoneSubmitted" },
+        {
+          $setOnInsert: {
+            jobId: Number(jobId),
+            milestoneIndex: Number(milestoneIndex),
+            eventType: "MilestoneSubmitted",
+            txHash: event.log.transactionHash,
+            blockNumber: event.log.blockNumber,
+            timestamp: new Date(),
+          },
+          $set: {
+            deadline: new Date(Number(deadline) * 1000),
+          },
+        },
+        { upsert: true }
+      );
+
+      console.log(`MilestoneSubmitted synced for job #${Number(jobId)}, milestone ${Number(milestoneIndex)}`);
+    } catch (error) {
+      console.error("MilestoneSubmitted sync failed", error);
+    }
+  });
+
+  escrow.on("MilestoneApproved", async (jobId, milestoneIndex, amountReleased, event) => {
+    try {
+      await jobEvents.updateOne(
+        { txHash: event.log.transactionHash, eventType: "MilestoneApproved" },
+        {
+          $setOnInsert: {
+            jobId: Number(jobId),
+            milestoneIndex: Number(milestoneIndex),
+            eventType: "MilestoneApproved",
+            txHash: event.log.transactionHash,
+            blockNumber: event.log.blockNumber,
+            timestamp: new Date(),
+          },
+          $set: {
+            amountReleased: ethers.formatEther(amountReleased),
+          },
+        },
+        { upsert: true }
+      );
+
+      console.log(`MilestoneApproved synced for job #${Number(jobId)}, milestone ${Number(milestoneIndex)}`);
+    } catch (error) {
+      console.error("MilestoneApproved sync failed", error);
+    }
+  });
+
+  escrow.on("MilestoneRejected", async (jobId, milestoneIndex, event) => {
+    try {
+      await jobEvents.updateOne(
+        { txHash: event.log.transactionHash, eventType: "MilestoneRejected" },
+        {
+          $setOnInsert: {
+            jobId: Number(jobId),
+            milestoneIndex: Number(milestoneIndex),
+            eventType: "MilestoneRejected",
+            txHash: event.log.transactionHash,
+            blockNumber: event.log.blockNumber,
+            timestamp: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+
+      console.log(`MilestoneRejected synced for job #${Number(jobId)}, milestone ${Number(milestoneIndex)}`);
+    } catch (error) {
+      console.error("MilestoneRejected sync failed", error);
+    }
+  });
+
+  escrow.on("MilestoneAutoReleased", async (jobId, milestoneIndex, amountReleased, event) => {
+    try {
+      await jobEvents.updateOne(
+        { txHash: event.log.transactionHash, eventType: "MilestoneAutoReleased" },
+        {
+          $setOnInsert: {
+            jobId: Number(jobId),
+            milestoneIndex: Number(milestoneIndex),
+            eventType: "MilestoneAutoReleased",
+            txHash: event.log.transactionHash,
+            blockNumber: event.log.blockNumber,
+            timestamp: new Date(),
+          },
+          $set: {
+            amountReleased: ethers.formatEther(amountReleased),
+          },
+        },
+        { upsert: true }
+      );
+
+      console.log(`MilestoneAutoReleased synced for job #${Number(jobId)}, milestone ${Number(milestoneIndex)}`);
+    } catch (error) {
+      console.error("MilestoneAutoReleased sync failed", error);
+    }
+  });
+
+  escrow.on("AllMilestonesCompleted", async (jobId, event) => {
+    try {
+      await jobs.updateOne(
+        { jobId: Number(jobId) },
+        {
+          $set: {
+            status: "COMPLETED",
+            txHash: event.log.transactionHash,
+            updatedAt: new Date(),
+          },
+        }
+      );
+
+      const job = await jobs.findOne({ jobId: Number(jobId) });
+
+      await jobEvents.updateOne(
+        { txHash: event.log.transactionHash, eventType: "AllMilestonesCompleted" },
+        {
+          $setOnInsert: {
+            jobId: Number(jobId),
+            eventType: "AllMilestonesCompleted",
+            txHash: event.log.transactionHash,
+            blockNumber: event.log.blockNumber,
+            timestamp: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+
+      if (job?.developer) {
+        const onChainProfile = await profile.getProfile(job.developer);
+        await profiles.updateOne(
+          { walletAddress: job.developer.toLowerCase() },
+          {
+            $setOnInsert: {
+              walletAddress: job.developer.toLowerCase(),
+              tokenId: 0,
+              createdAt: new Date(),
+            },
+            $set: {
+              reputation: Number(onChainProfile.reputation),
+              completedJobs: Number(onChainProfile.completedJobs),
+              lastUpdatedBlock: event.log.blockNumber,
+              updatedAt: new Date(),
+            },
+          },
+          { upsert: true }
+        );
+      }
+
+      console.log(`AllMilestonesCompleted synced for job #${Number(jobId)}`);
+    } catch (error) {
+      console.error("AllMilestonesCompleted sync failed", error);
     }
   });
 }

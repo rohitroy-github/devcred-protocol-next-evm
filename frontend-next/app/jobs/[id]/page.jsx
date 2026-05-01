@@ -7,9 +7,13 @@ import { FaEthereum } from "react-icons/fa";
 import WalletButton from "../../../components/WalletButton";
 import {
   autoReleaseFundsOnChain,
+  autoReleaseMilestoneOnChain,
   approveWorkOnChain,
+  approveMilestoneOnChain,
   assignDeveloperOnChain,
   cancelJobOnChain,
+  rejectMilestoneOnChain,
+  submitMilestoneOnChain,
   submitWorkOnChain,
 } from "../../../lib/evm";
 
@@ -68,6 +72,10 @@ export default function JobDetailsPage() {
         approve: "approve work",
         cancel: "cancel job",
         autoRelease: "auto-release funds",
+        submitMilestone: "submit milestone",
+        approveMilestone: "approve milestone",
+        rejectMilestone: "reject milestone",
+        autoReleaseMilestone: "auto-release milestone",
       }[action] || action;
 
     const message = String(txError?.message || "").toLowerCase();
@@ -218,9 +226,24 @@ export default function JobDetailsPage() {
           txHash = submitResult.txHash;
         }
 
+        if (action === "submitMilestone") {
+          const submitMilestoneResult = await submitMilestoneOnChain(job.jobId);
+          txHash = submitMilestoneResult.txHash;
+        }
+
         if (action === "approve") {
           const approveResult = await approveWorkOnChain(job.jobId);
           txHash = approveResult.txHash;
+        }
+
+        if (action === "approveMilestone") {
+          const approveMilestoneResult = await approveMilestoneOnChain(job.jobId);
+          txHash = approveMilestoneResult.txHash;
+        }
+
+        if (action === "rejectMilestone") {
+          const rejectMilestoneResult = await rejectMilestoneOnChain(job.jobId);
+          txHash = rejectMilestoneResult.txHash;
         }
 
         if (action === "cancel") {
@@ -231,6 +254,11 @@ export default function JobDetailsPage() {
         if (action === "autoRelease") {
           const autoReleaseResult = await autoReleaseFundsOnChain(job.jobId);
           txHash = autoReleaseResult.txHash;
+        }
+
+        if (action === "autoReleaseMilestone") {
+          const autoReleaseMilestoneResult = await autoReleaseMilestoneOnChain(job.jobId);
+          txHash = autoReleaseMilestoneResult.txHash;
         }
       } catch (txError) {
         throw new Error(mapActionTxError(action, txError));
@@ -276,6 +304,15 @@ export default function JobDetailsPage() {
     connectedWallet === jobClientWallet;
 
   const assignedDeveloperLabel = job?.developer || developerInput || "";
+  const isMilestoneJob = Boolean(job?.isMilestoneJob);
+  const milestones = Array.isArray(job?.milestones) ? job.milestones : [];
+  const currentMilestoneIndex = Number(job?.currentMilestoneIndex || 0);
+  const currentMilestone = milestones[currentMilestoneIndex] || null;
+  const currentMilestoneStatus = currentMilestone?.status || "Pending";
+  const totalMilestoneBudget = milestones
+    .reduce((sum, milestone) => sum + Number(milestone?.amount || 0), 0)
+    .toFixed(4);
+
   const isDeveloperAssigned =
     Boolean(job?.developer) &&
     job?.developer !== "Unassigned" &&
@@ -306,16 +343,78 @@ export default function JobDetailsPage() {
             Developer: {renderAddressWithCopy(job?.developer, "Developer wallet", "Unassigned")}
           </p>
           <p className="inline-flex items-center gap-0.5">
-            Amount: {job?.amount || "0"}
+            Total Budget: {isMilestoneJob ? totalMilestoneBudget : job?.amount || "0"}
             <FaEthereum className="h-3.5 w-3.5 text-zinc-800" aria-hidden="true" />
           </p>
           <p>Status: {statusLabel}</p>
         </div>
 
-        <div className="mt-4 rounded-lg border border-zinc-200 p-3">
+                <div className="mt-4 rounded-lg border border-zinc-200 p-3">
           <h2 className="text-sm font-semibold text-zinc-900">Job Todo</h2>
           <p className="mt-2 text-xs text-zinc-600">{job?.description || "-"}</p>
         </div>
+
+
+        {isMilestoneJob ? (
+          <div className="mt-4 rounded-lg border border-zinc-200 p-3">
+            <h2 className="text-sm font-semibold text-zinc-900">Milestones</h2>
+            {milestones.length > 0 ? (
+              <ol className="group mt-4 space-y-4 transition-colors rounded-lg p-2 -m-2">
+                {milestones.map((milestone, index) => {
+                  const status = milestone?.status || "Pending";
+                  const isSubmitted = status === "Submitted";
+                  const isApproved = status === "Approved";
+                  const isRejected = status === "Rejected";
+                  const nodeClass = isApproved
+                    ? "bg-emerald-500"
+                    : isSubmitted
+                      ? "bg-amber-500"
+                      : isRejected
+                        ? "bg-rose-500"
+                        : "bg-zinc-300";
+                  const lineClass = isApproved || isSubmitted ? "bg-emerald-300" : "bg-zinc-200";
+                  const statusTextClass = isApproved
+                    ? "text-emerald-700"
+                    : isSubmitted
+                      ? "text-amber-700"
+                      : isRejected
+                        ? "text-rose-700"
+                        : "text-zinc-600";
+
+                  return (
+                    <li key={`milestone-${index}`} className="relative pl-10 cursor-pointer">
+                      <span
+                        className={`absolute left-0 top-1.5 z-10 h-4 w-4 rounded-full ring-4 ring-white transition-all ${nodeClass} group-hover:ring-zinc-300`}
+                        aria-hidden="true"
+                      />
+                      {index < milestones.length - 1 ? (
+                        <span
+                          className={`absolute left-[7px] top-5 h-[calc(100%+12px)] w-[2px] transition-opacity ${lineClass} group-hover:opacity-100`}
+                          aria-hidden="true"
+                        />
+                      ) : null}
+
+                      <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 transition-all group-hover:bg-zinc-100 group-hover:shadow-sm">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-medium text-zinc-900">Milestone #{index + 1}</p>
+                          <p className={`text-xs font-semibold ${statusTextClass}`}>{status}</p>
+                        </div>
+                        <p className="mt-1 inline-flex items-baseline gap-0.25 text-xs leading-none text-zinc-700">
+                          Budget: {milestone?.amount || "0"}
+                          <FaEthereum className="h-2.5 w-2.5 shrink-0 align-baseline text-zinc-800" aria-hidden="true" />
+                        </p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            ) : (
+              <p className="mt-2 text-xs text-zinc-600">No milestones recorded.</p>
+            )}
+          </div>
+        ) : null}
+
+
 
         <div className="mt-4">
           <label
@@ -343,28 +442,66 @@ export default function JobDetailsPage() {
           >
             Assign Developer
           </button>
-          <button
-            onClick={() => submitAction("submit")}
-            disabled={isJobLocked || !isDeveloperAssigned}
-            className="cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Submit Work
-          </button>
-          <button
-            onClick={() => submitAction("approve")}
-            disabled={job?.status !== "SUBMITTED" || isJobLocked}
-            className="cursor-pointer rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Approve Work
-          </button>
-          <button
-            onClick={() => submitAction("autoRelease")}
-            disabled={job?.status !== "SUBMITTED" || isJobLocked}
-            className="inline-flex cursor-pointer items-center justify-center gap-1 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Auto-Release Escrow
-            <FaEthereum className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
+
+          {!isMilestoneJob ? (
+            <>
+              <button
+                onClick={() => submitAction("submit")}
+                disabled={isJobLocked || !isDeveloperAssigned}
+                className="cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Submit Work
+              </button>
+              <button
+                onClick={() => submitAction("approve")}
+                disabled={job?.status !== "SUBMITTED" || isJobLocked}
+                className="cursor-pointer rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Approve Work
+              </button>
+              <button
+                onClick={() => submitAction("autoRelease")}
+                disabled={job?.status !== "SUBMITTED" || isJobLocked}
+                className="inline-flex cursor-pointer items-center justify-center gap-1 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Auto-Release Escrow
+                <FaEthereum className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => submitAction("submitMilestone")}
+                disabled={isJobLocked || !isDeveloperAssigned || currentMilestoneStatus !== "Pending" || job?.status !== "IN_PROGRESS"}
+                className="cursor-pointer rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Submit Milestone
+              </button>
+              <button
+                onClick={() => submitAction("approveMilestone")}
+                disabled={isJobLocked || currentMilestoneStatus !== "Submitted" || job?.status !== "IN_PROGRESS"}
+                className="cursor-pointer rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Approve Milestone
+              </button>
+              <button
+                onClick={() => submitAction("rejectMilestone")}
+                disabled={isJobLocked || currentMilestoneStatus !== "Submitted" || job?.status !== "IN_PROGRESS"}
+                className="cursor-pointer rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-500 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Reject Milestone
+              </button>
+              <button
+                onClick={() => submitAction("autoReleaseMilestone")}
+                disabled={isJobLocked || currentMilestoneStatus !== "Submitted" || job?.status !== "IN_PROGRESS"}
+                className="inline-flex cursor-pointer items-center justify-center gap-1 rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-amber-400 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Auto-Release Milestone
+                <FaEthereum className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </>
+          )}
+
           <button
             onClick={() => submitAction("cancel")}
             disabled={isJobLocked || !isClientActor}

@@ -13,6 +13,19 @@ const JobEventSchema = new Schema(
       required: true,
       trim: true,
       index: true,
+      enum: [
+        "JobCreated",
+        "JobAssigned",
+        "JobSubmitted",
+        "JobCompleted",
+        "JobCancelled",
+        "AutoReleased",
+        "MilestoneSubmitted",
+        "MilestoneApproved",
+        "MilestoneRejected",
+        "MilestoneAutoReleased",
+        "AllMilestonesCompleted",
+      ],
     },
     triggeredBy: {
       type: String,
@@ -44,6 +57,25 @@ const JobEventSchema = new Schema(
       default: Date.now,
       index: true,
     },
+    // Milestone-specific fields
+    milestoneIndex: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    amountReleased: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    deadline: {
+      type: Date,
+      default: null,
+    },
+    isMilestoneJob: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     collection: "jobEvents",
@@ -51,6 +83,8 @@ const JobEventSchema = new Schema(
 );
 
 JobEventSchema.index({ jobId: 1, timestamp: -1 });
+JobEventSchema.index({ eventType: 1, timestamp: -1 });
+JobEventSchema.index({ milestoneIndex: 1 }, { sparse: true });
 
 export default mongoose.models.JobEvent ||
   mongoose.model("JobEvent", JobEventSchema);

@@ -1,5 +1,30 @@
 import mongoose, { Schema } from "mongoose";
 
+const MilestoneSchema = new Schema(
+  {
+    index: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    amount: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    status: {
+      type: String,
+      enum: ["Pending", "Submitted", "Approved", "Rejected"],
+      default: "Pending",
+    },
+    submittedAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  { _id: false }
+);
+
 const JobSchema = new Schema(
   {
     jobId: {
@@ -70,6 +95,25 @@ const JobSchema = new Schema(
       trim: true,
       default: "",
     },
+    // Milestone-based job fields
+    isMilestoneJob: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    milestones: {
+      type: [MilestoneSchema],
+      default: [],
+    },
+    currentMilestoneIndex: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    submittedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -78,5 +122,13 @@ const JobSchema = new Schema(
 );
 
 JobSchema.index({ jobId: 1 }, { unique: true });
+JobSchema.index({ client: 1, isMilestoneJob: 1 });
 
-export default mongoose.models.Job || mongoose.model("Job", JobSchema);
+const existingJobModel = mongoose.models.Job;
+if (existingJobModel && !existingJobModel.schema.path("isMilestoneJob")) {
+  delete mongoose.models.Job;
+}
+
+const JobModel = mongoose.models.Job || mongoose.model("Job", JobSchema);
+
+export default JobModel;
