@@ -106,12 +106,16 @@ export async function POST(request) {
 
     const milestones = Array.isArray(body?.milestones)
       ? body.milestones
-          .map((entry, index) => ({
-            index,
-            amount: normalizeAmount(entry),
-            status: "Pending",
-            submittedAt: null,
-          }))
+          .map((amount, index) => {
+            const descriptions = Array.isArray(body?.milestoneDescriptions) ? body.milestoneDescriptions : [];
+            return {
+              index,
+              description: typeof descriptions[index] === "string" ? descriptions[index].trim() : "",
+              amount: normalizeAmount(amount),
+              status: "Pending",
+              submittedAt: null,
+            };
+          })
           .filter((entry) => entry.amount)
       : [];
 

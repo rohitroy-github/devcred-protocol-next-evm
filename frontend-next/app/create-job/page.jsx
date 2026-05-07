@@ -13,6 +13,7 @@ const initialForm = {
   metadataURI: "",
   isMilestoneJob: false,
   milestones: [],
+  milestoneDescriptions: [], // Array of descriptions for each milestone
 };
 
 export default function CreateJobPage() {
@@ -50,19 +51,30 @@ export default function CreateJobPage() {
       ...prev,
       isMilestoneJob: type === "milestone",
       milestones: [],
+      milestoneDescriptions: [],
       budget: "",
     }));
   }
 
-  function handleMilestoneChange(index, value) {
-    const newMilestones = [...form.milestones];
-    newMilestones[index] = value;
-    setForm((prev) => ({ ...prev, milestones: newMilestones }));
+  function handleMilestoneChange(index, field, value) {
+    if (field === "amount") {
+      const newMilestones = [...form.milestones];
+      newMilestones[index] = value;
+      setForm((prev) => ({ ...prev, milestones: newMilestones }));
+    } else if (field === "description") {
+      const newDescriptions = [...form.milestoneDescriptions];
+      newDescriptions[index] = value;
+      setForm((prev) => ({ ...prev, milestoneDescriptions: newDescriptions }));
+    }
   }
 
   function addMilestone() {
     if (form.milestones.length < 3) {
-      setForm((prev) => ({ ...prev, milestones: [...prev.milestones, ""] }));
+      setForm((prev) => ({
+        ...prev,
+        milestones: [...prev.milestones, ""],
+        milestoneDescriptions: [...prev.milestoneDescriptions, ""],
+      }));
     }
   }
 
@@ -70,6 +82,7 @@ export default function CreateJobPage() {
     setForm((prev) => ({
       ...prev,
       milestones: prev.milestones.filter((_, i) => i !== index),
+      milestoneDescriptions: prev.milestoneDescriptions.filter((_, i) => i !== index),
     }));
   }
 
@@ -195,6 +208,7 @@ export default function CreateJobPage() {
         // Add amount or milestones based on job type
         if (txResult.isMilestoneJob) {
           jobPayload.milestones = txResult.milestoneAmounts;
+          jobPayload.milestoneDescriptions = form.milestoneDescriptions;
           jobPayload.amount = txResult.totalAmount;
         } else {
           jobPayload.amount = txResult.amount;
@@ -355,24 +369,39 @@ export default function CreateJobPage() {
               <label className="mb-1 block text-sm font-medium text-zinc-700">
                 Milestones (max 3)
               </label>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {form.milestones.map((amount, index) => (
-                  <div key={index} className="flex gap-2">
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={amount}
-                      onChange={(e) => handleMilestoneChange(index, e.target.value)}
-                      placeholder={`Milestone ${index + 1} (ETH)`}
-                      className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeMilestone(index)}
-                      className="rounded-lg bg-red-100 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-200 cursor-pointer"
-                    >
-                      Remove
-                    </button>
+                  <div key={index} className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 space-y-2">
+                    <div className="flex gap-2 items-end">
+                      <div className="flex-1">
+                        <label className="text-xs font-medium text-zinc-600">Amount (ETH)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={amount}
+                          onChange={(e) => handleMilestoneChange(index, "amount", e.target.value)}
+                          placeholder={`Milestone ${index + 1} (ETH)`}
+                          className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeMilestone(index)}
+                        className="rounded-lg bg-red-100 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-200 cursor-pointer whitespace-nowrap"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-zinc-600">Description</label>
+                      <textarea
+                        value={form.milestoneDescriptions[index] || ""}
+                        onChange={(e) => handleMilestoneChange(index, "description", e.target.value)}
+                        placeholder={`Describe what's included in milestone ${index + 1}`}
+                        rows={2}
+                        className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-900"
+                      />
+                    </div>
                   </div>
                 ))}
                 {form.milestones.length < 3 && (

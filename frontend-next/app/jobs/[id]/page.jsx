@@ -403,6 +403,9 @@ export default function JobDetailsPage() {
                           Budget: {milestone?.amount || "0"}
                           <FaEthereum className="h-2.5 w-2.5 shrink-0 align-baseline text-zinc-800" aria-hidden="true" />
                         </p>
+                        {milestone?.description && (
+                          <p className="mt-2 text-xs text-zinc-600">{milestone.description}</p>
+                        )}
                       </div>
                     </li>
                   );

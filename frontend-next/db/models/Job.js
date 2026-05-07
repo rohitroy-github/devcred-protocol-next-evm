@@ -7,6 +7,11 @@ const MilestoneSchema = new Schema(
       required: true,
       min: 0,
     },
+    description: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     amount: {
       type: String,
       required: true,
