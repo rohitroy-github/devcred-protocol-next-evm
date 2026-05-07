@@ -28,6 +28,12 @@ function normalizeWalletAddress(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
+function normalizeDecimal(value, precision = 12) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Number(parsed.toFixed(precision));
+}
+
 function resolveTriggeredBy(action, job, actor) {
   const normalizedClient = normalizeWalletAddress(job?.client);
   const normalizedDeveloper = normalizeWalletAddress(job?.developer);
@@ -115,6 +121,8 @@ export async function POST(request, context) {
     }
 
     let milestoneIndex = null;
+    let milestoneReputationIncrement = 0;
+    let shouldIncrementCompletedJobs = false;
 
     if (isMilestoneAction) {
       milestoneIndex = Number(job.currentMilestoneIndex || 0);
@@ -139,7 +147,13 @@ export async function POST(request, context) {
       if (action === "approvemilestone" || action === "autoreleasemilestone") {
         milestone.status = "Approved";
 
+        const parsedMilestoneAmount = Number.parseFloat(milestone?.amount ?? 0);
+        milestoneReputationIncrement = Number.isFinite(parsedMilestoneAmount)
+          ? parsedMilestoneAmount
+          : 0;
+
         const isLastMilestone = milestoneIndex + 1 >= job.milestones.length;
+        shouldIncrementCompletedJobs = isLastMilestone;
         if (isLastMilestone) {
           job.status = "COMPLETED";
         } else {
@@ -151,21 +165,53 @@ export async function POST(request, context) {
 
     await job.save();
 
-    if ((action === "approve" || action === "autorelease") && job.developer) {
-      const reputationIncrement = Number.parseFloat(job.amount ?? 0);
+    if (job.developer) {
+      const isSingleJobCompletionAction = action === "approve" || action === "autorelease";
+      const isMilestoneApprovalAction =
+        action === "approvemilestone" || action === "autoreleasemilestone";
 
-      await Profile.findOneAndUpdate(
-        { walletAddress: normalizeWalletAddress(job.developer) },
-        {
-          $inc: {
-            reputation: Number.isFinite(reputationIncrement)
-              ? reputationIncrement
-              : 0,
-            completedJobs: 1,
-          },
-        },
-        { new: true }
-      );
+      if (isSingleJobCompletionAction || isMilestoneApprovalAction) {
+        const parsedJobAmount = Number.parseFloat(job.amount ?? 0);
+        const reputationIncrement = isSingleJobCompletionAction
+          ? Number.isFinite(parsedJobAmount)
+            ? parsedJobAmount
+            : 0
+          : milestoneReputationIncrement;
+        const completedJobsIncrement = isSingleJobCompletionAction
+          ? 1
+          : shouldIncrementCompletedJobs
+            ? 1
+            : 0;
+
+        if (reputationIncrement > 0 || completedJobsIncrement > 0) {
+          const normalizedDeveloperWallet = normalizeWalletAddress(job.developer);
+          const existingProfile = await Profile.findOne({
+            walletAddress: normalizedDeveloperWallet,
+          }).lean();
+
+          const currentReputation = normalizeDecimal(existingProfile?.reputation ?? 0);
+          const nextReputation = normalizeDecimal(currentReputation + reputationIncrement);
+          const currentCompletedJobs = Number(existingProfile?.completedJobs ?? 0);
+          const nextCompletedJobs = Number.isFinite(currentCompletedJobs)
+            ? currentCompletedJobs + completedJobsIncrement
+            : completedJobsIncrement;
+
+          await Profile.findOneAndUpdate(
+            { walletAddress: normalizedDeveloperWallet },
+            {
+              $setOnInsert: {
+                walletAddress: normalizedDeveloperWallet,
+                tokenId: 0,
+              },
+              $set: {
+                reputation: nextReputation,
+                completedJobs: nextCompletedJobs,
+              },
+            },
+            { new: true, upsert: true }
+          );
+        }
+      }
     }
 
     const triggeredBy = resolveTriggeredBy(action, job, actor);
