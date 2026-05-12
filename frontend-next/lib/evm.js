@@ -1,4 +1,4 @@
-import { BrowserProvider, Contract, Interface, isAddress, parseEther } from "ethers";
+import { BrowserProvider, Contract, Interface, formatEther, isAddress, parseEther } from "ethers";
 import { CONTRACTS, DEV_CRED_ESCROW_ABI, DEV_CRED_PROFILE_ABI } from "./contracts";
 
 const LOCAL_CHAIN_ID = "0x7a69";
@@ -127,7 +127,8 @@ export async function getProfileOnChain(walletAddress) {
   return {
     walletAddress: walletAddress.toLowerCase(),
     tokenId: Number(tokenId),
-    reputation: Number(onChainProfile.reputation),
+    // Contract stores reputation in wei; normalize to ETH for UI/DB consistency.
+    reputation: Number(formatEther(onChainProfile.reputation)),
     completedJobs: Number(onChainProfile.completedJobs),
   };
 }
