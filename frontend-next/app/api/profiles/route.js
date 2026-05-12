@@ -53,7 +53,7 @@ export async function POST(request) {
   const profile = await Profile.create({
     walletAddress,
     tokenId,
-    reputation: 0,
+    reputation: "0",
     completedJobs: 0,
     lastUpdatedBlock: 0,
   });

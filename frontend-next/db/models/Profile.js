@@ -33,9 +33,9 @@ const ProfileSchema = new Schema(
       min: 0,
     },
     reputation: {
-      type: Number,
-      default: 0,
-      min: 0,
+      type: String,
+      default: "0",
+      trim: true,
     },
     completedJobs: {
       type: Number,

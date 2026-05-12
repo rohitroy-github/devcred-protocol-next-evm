@@ -38,7 +38,7 @@ export default function ProfilePage() {
 
     const payload = {
       tokenId: chainProfile.tokenId,
-      reputation: chainProfile.reputation,
+      reputation: String(chainProfile.reputation ?? 0),
       completedJobs: chainProfile.completedJobs,
       lastUpdatedBlock: chainProfile.lastUpdatedBlock || 0,
     };
@@ -206,7 +206,7 @@ export default function ProfilePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tokenId: profile.tokenId,
-          reputation: profile.reputation,
+          reputation: String(profile.reputation ?? 0),
           completedJobs: profile.completedJobs,
           lastUpdatedBlock: profile.lastUpdatedBlock || 0,
           name: trimmedName,

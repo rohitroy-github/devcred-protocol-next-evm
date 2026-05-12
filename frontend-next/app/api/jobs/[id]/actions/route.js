@@ -204,7 +204,7 @@ export async function POST(request, context) {
                 tokenId: 0,
               },
               $set: {
-                reputation: nextReputation,
+                reputation: String(nextReputation),
                 completedJobs: nextCompletedJobs,
               },
             },

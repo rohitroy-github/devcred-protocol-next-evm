@@ -25,6 +25,18 @@ function normalizeWalletAddress(value) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
+function normalizeReputationString(value) {
+  const raw = typeof value === "string" ? value.trim() : String(value ?? "").trim();
+  if (!raw) return "0";
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return "0";
+  }
+
+  return raw;
+}
+
 export async function GET(_request, context) {
   const resolvedParams = await Promise.resolve(context?.params);
   const walletAddress = normalizeWalletAddress(resolvedParams?.walletAddress);
@@ -53,7 +65,7 @@ export async function POST(request, context) {
 
   const body = await request.json().catch(() => ({}));
   const tokenId = Number(body?.tokenId);
-  const reputation = Number(body?.reputation ?? 0);
+  const reputation = normalizeReputationString(body?.reputation);
   const completedJobs = Number(body?.completedJobs ?? 0);
   const lastUpdatedBlock = Number(body?.lastUpdatedBlock ?? 0);
   const hasNameInput = typeof body?.name === "string";
@@ -73,7 +85,7 @@ export async function POST(request, context) {
 
   const setPayload = {
     tokenId,
-    reputation: Number.isFinite(reputation) ? reputation : 0,
+    reputation,
     completedJobs: Number.isFinite(completedJobs) ? completedJobs : 0,
     lastUpdatedBlock: Number.isFinite(lastUpdatedBlock) ? lastUpdatedBlock : 0,
   };
