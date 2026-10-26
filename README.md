@@ -102,7 +102,7 @@ frontend-next/
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 20.9+ (required by Next.js 16)
 - npm
 - MongoDB instance (local or Atlas)
 
@@ -172,6 +172,36 @@ npm run dev
 ```
 
 Open `http://localhost:3000`.
+
+Development uses Webpack explicitly to avoid the Turbopack `Next.js package not found`
+panic observed in this Windows/OneDrive workspace. After changing the dev command,
+stop the existing frontend server with Ctrl+C and run `npm run dev` again.
+The production build command is unchanged.
+
+If startup fails with `EPERM` while removing a directory under `.next\dev`,
+stop the frontend server and check the generated cache's Windows attributes.
+Read-only cache directories were observed in this OneDrive workspace. From
+`frontend-next`, clear only the generated cache's read-only attributes:
+
+```powershell
+$cache = Get-Item -LiteralPath .\.next -Force -ErrorAction Stop
+$entries = @($cache) + @(Get-ChildItem -LiteralPath $cache.FullName -Recurse -Force -ErrorAction Stop)
+foreach ($entry in $entries) {
+    if (($entry.Attributes -band [System.IO.FileAttributes]::ReadOnly) -ne 0) {
+        $entry.Attributes = $entry.Attributes -band (-bnot [System.IO.FileAttributes]::ReadOnly)
+    }
+}
+npm run dev
+```
+
+This preserves source files and cache contents. If sync reapplies these attributes
+or file-lock errors persist, run the project outside OneDrive rather than
+repeatedly deleting its cache.
+
+If React reports an extra `data-scribe-recorder-ready` attribute on `<html>`,
+disable the Scribe recorder browser extension for localhost, or use a browser
+profile with extensions disabled. This is browser-injected markup, not the
+Turbopack crash; hydration warnings should not be suppressed to hide it.
 
 ## Useful Commands
 

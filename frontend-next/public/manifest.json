@@ -1,0 +1,11 @@
+{
+  "name": "DevCred Protocol",
+  "short_name": "DevCred",
+  "description": "Developer credentials, freelance jobs, and smart contract escrow.",
+  "lang": "en",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff"
+}
