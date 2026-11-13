@@ -62,5 +62,6 @@ backend-hardhat/build/
 # External files
 readMeRohit
 /readMeRohit
-/backup_contracts
-backup_contracts
+#commenting for laptop data shift
+#/backup_contracts
+#backup_contracts
